@@ -23,7 +23,6 @@ class AlbersEqualAreaProjection(object):
             ra_[ra_ < -180 ] += 360
             ra_[ra_ > 180 ] -= 360
 
-            # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
             theta = self.n * ra_[0]
             rho = self.__rho__(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
@@ -144,12 +143,27 @@ class AlbersEqualAreaProjection(object):
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
 
+        # remove duplicates
+        parallels_ = np.unique(parallels % 360)
+
+        # the outer boundaries need to be duplicated because the same
+        # parallel appears on the left and the right side of the map
+        if self.ra_0 < 180:
+            outer = self.ra_0 - 180
+        else:
+            outer = self.ra_0 + 180
+        parallels_ = np.array(list(parallels_) + [outer])
+
         if loc == "bottom":
             ticks = []
             labels = []
-            for p in parallels:
-                tick = self.findIntersectionAtY(ylim[0], xlim, ra=p)
-                print p, tick
+            for p in parallels_:
+                p_ = p
+                if p - self.ra_0 < -180:
+                    p_ += 360
+                if p - self.ra_0 > 180:
+                    p_ -= 360
+                tick = self.findIntersectionAtY(ylim[0], xlim, ra=p_)
                 if tick is not None:
                     ticks.append(tick)
                     labels.append(fmt(p))
@@ -159,8 +173,14 @@ class AlbersEqualAreaProjection(object):
         if loc == "top":
             ticks = []
             labels = []
-            for p in parallels:
-                tick = self.findIntersectionAtY(ylim[1], xlim, ra=p)
+            for p in parallels_:
+                p_ = p
+                # center of map is at ra=ra_0: wrap it around
+                if p - self.ra_0 < -180:
+                    p_ += 360
+                if p - self.ra_0 > 180:
+                    p_ -= 360
+                tick = self.findIntersectionAtY(ylim[1], xlim, ra=p_)
                 if tick is not None:
                     ticks.append(tick)
                     labels.append(fmt(p))
@@ -180,6 +200,8 @@ def pmDeg(deg):
     return format % np.abs(deg)
 
 def hourAngle(ra):
+    if ra < 0:
+        ra += 360
     hours = int(ra)/15
     minutes = int(float(ra - hours*15)/15 * 60)
     minutes = '{:>02}'.format(minutes)
@@ -187,17 +209,16 @@ def hourAngle(ra):
 
 fig = plt.figure()
 ax = fig.add_subplot(111, aspect='equal')
-
-aea = AlbersEqualAreaProjection(45, 0., -30, 20)
+aea = AlbersEqualAreaProjection(60, 0., -10, 20)
 meridians = np.linspace(-90, 90, 13)
 parallels = np.linspace(0, 360, 25)
 patches = aea.getMeridianPatches(meridians, linestyle=':', lw=0.5)
 ax.add_collection(patches)
 patches = aea.getParallelPatches(parallels, linestyle=':', lw=0.5)
 ax.add_collection(patches)
-ax.set_xlim(-0.5, 0.5)
-ax.set_ylim(-1, 1)
+ax.set_xlim(-1.25, 1.25)
+ax.set_ylim(-1.25, 1.25)
 aea.setMeridianLabels(ax, meridians, loc="right", fmt=pmDeg)
-aea.setParallelLabels(ax, parallels, loc="bottom", fmt=hourAngle)
+aea.setParallelLabels(ax, parallels, loc="top", fmt=hourAngle)
 plt.tick_params(which='both', length=0)
 plt.show()
