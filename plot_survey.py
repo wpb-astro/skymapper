@@ -80,10 +80,14 @@ class AlbersEqualAreaProjection(object):
     def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
         from scipy.optimize import newton
         if dec is not None:
-            try:
-                return newton(lambda y: self.__call__(x,y,inverse=True)[1] - dec, (ylim[0] + ylim[1])/2)
-            except RuntimeError:
+            # analytic solution for intersection of circle with line at x
+            r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
+            if np.abs(x) > np.abs(r):
                 return None
+            if self.rho_0 >= 0:
+                return self.rho_0 - np.sqrt(r**2 - x**2)
+            else:
+                return np.sqrt(r**2 - x**2) + self.rho_0
         if ra is not None:
             try:
                 return newton(lambda y: self.__call__(x,y,inverse=True)[0] - ra, (ylim[0] + ylim[1])/2)
@@ -94,10 +98,14 @@ class AlbersEqualAreaProjection(object):
     def findIntersectionAtY(self, y, xlim, ra=None, dec=None):
         from scipy.optimize import newton
         if dec is not None:
-            try:
-                return newton(lambda x: self.__call__(x,y,inverse=True)[1] - dec, (xlim[0] + xlim[1])/2)
-            except RuntimeError:
+            # analytic solution for intersection of circle with line at x
+            r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
+            if np.abs(y) > np.abs(r):
                 return None
+            if self.rho_0 >= 0:
+                return self.rho_0 - np.sqrt(r**2 - y**2)
+            else:
+                return np.sqrt(r**2 - y**2) + self.rho_0
         if ra is not None:
             try:
                 return newton(lambda x: self.__call__(x,y,inverse=True)[0] - ra, (xlim[0] + xlim[1])/2)
@@ -128,7 +136,6 @@ class AlbersEqualAreaProjection(object):
             labels = []
             for m in meridians:
                 tick = self.findIntersectionAtX(xlim[1], ylim, dec=m)
-                print m, tick
                 if tick is not None:
                     ticks.append(tick)
                     labels.append(fmt(m))
@@ -194,9 +201,9 @@ class AlbersEqualAreaProjection(object):
 def pmDeg(deg):
     format = "%d$^\circ$"
     if deg > 0:
-        format = "+" + format
+        format = "$+$" + format
     if deg < 0:
-        format = "-" + format
+        format = "$-$" + format
     return format % np.abs(deg)
 
 def hourAngle(ra):
@@ -209,16 +216,16 @@ def hourAngle(ra):
 
 fig = plt.figure()
 ax = fig.add_subplot(111, aspect='equal')
-aea = AlbersEqualAreaProjection(60, 0., -10, 20)
+aea = AlbersEqualAreaProjection(60, 0., -20, 10)
 meridians = np.linspace(-90, 90, 13)
 parallels = np.linspace(0, 360, 25)
 patches = aea.getMeridianPatches(meridians, linestyle=':', lw=0.5)
 ax.add_collection(patches)
 patches = aea.getParallelPatches(parallels, linestyle=':', lw=0.5)
 ax.add_collection(patches)
-ax.set_xlim(-1.25, 1.25)
-ax.set_ylim(-1.25, 1.25)
-aea.setMeridianLabels(ax, meridians, loc="right", fmt=pmDeg)
-aea.setParallelLabels(ax, parallels, loc="top", fmt=hourAngle)
+ax.set_xlim(-0.8, 0.8)
+ax.set_ylim(-0.8, 0.8)
+aea.setMeridianLabels(ax, meridians, loc="left", fmt=pmDeg)
+aea.setParallelLabels(ax, parallels, loc="bottom", fmt=hourAngle)
 plt.tick_params(which='both', length=0)
 plt.show()
