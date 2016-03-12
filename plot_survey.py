@@ -1,11 +1,13 @@
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 
 class AlbersEqualAreaProjection(object):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        self.dec_0 = dec_0
-        self.dec_1 = dec_1
         self.ra_0 = ra_0
+        self.dec_0 = dec_0
+        self.dec_1 = dec_1 # dec1 and dec2 only needed for __repr__
+        self.dec_2 = dec_2
         self.deg2rad = np.pi/180
 
         self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
@@ -33,10 +35,7 @@ class AlbersEqualAreaProjection(object):
             return self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad
 
     def __repr__(self):
-        pass
-
-    def __print__(self):
-        pass
+        return "AlbersEqualAreaProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
     def getMeridianPatches(self, meridians, **kwargs):
         from matplotlib.patches import Arc
@@ -114,7 +113,7 @@ class AlbersEqualAreaProjection(object):
         raise NotImplementedError("specify either RA or Dec")
 
     def degFormatter(deg):
-        return "$%d^\circ$" % deg
+        return "%d$^\circ$" % deg
 
     def setMeridianLabels(self, ax, meridians, loc="left", fmt=degFormatter):
         xlim = ax.get_xlim()
@@ -198,7 +197,7 @@ class AlbersEqualAreaProjection(object):
 
         ax.set_xlim(xlim)
 
-def pmDeg(deg):
+def pmDegFormatter(deg):
     format = "%d$^\circ$"
     if deg > 0:
         format = "$+$" + format
@@ -206,7 +205,7 @@ def pmDeg(deg):
         format = "$-$" + format
     return format % np.abs(deg)
 
-def hourAngle(ra):
+def hourAngleFormatter(ra):
     if ra < 0:
         ra += 360
     hours = int(ra)/15
@@ -225,7 +224,7 @@ patches = aea.getParallelPatches(parallels, linestyle=':', lw=0.5)
 ax.add_collection(patches)
 ax.set_xlim(-0.8, 0.8)
 ax.set_ylim(-0.8, 0.8)
-aea.setMeridianLabels(ax, meridians, loc="left", fmt=pmDeg)
-aea.setParallelLabels(ax, parallels, loc="bottom", fmt=hourAngle)
+aea.setMeridianLabels(ax, meridians, loc="left", fmt=pmDegFormatter)
+aea.setParallelLabels(ax, parallels, loc="bottom", fmt=hourAngleFormatter)
 plt.tick_params(which='both', length=0)
 plt.show()
