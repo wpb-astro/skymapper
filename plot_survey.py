@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.cm as cm
 import numpy as np
 
 class AlbersEqualAreaProjection(object):
@@ -37,7 +39,7 @@ class AlbersEqualAreaProjection(object):
     def __repr__(self):
         return "AlbersEqualAreaProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
-    def getMeridianPatches(self, meridians, **kwargs):
+    def setMeridianPatches(self, ax, meridians, **kwargs):
         from matplotlib.patches import Arc
         from matplotlib.collections import PatchCollection
 
@@ -55,9 +57,9 @@ class AlbersEqualAreaProjection(object):
         radius = np.abs(self.rho_0 - y)
 
         patches = [Arc(origin, 2*radius[m], 2*radius[m], angle=angle, theta1=-angle_limit, theta2=angle_limit, **kwargs) for m in xrange(len(meridians))]
-        return PatchCollection(patches, match_original=True)
+        ax.add_collection(PatchCollection(patches, match_original=True))
 
-    def getParallelPatches(self, parallels, **kwargs):
+    def setParallelPatches(self, ax, parallels, **kwargs):
         # remove duplicates
         parallels_ = np.unique(parallels % 360)
 
@@ -74,7 +76,7 @@ class AlbersEqualAreaProjection(object):
         bottom = self.__call__(parallels_, -90)
         x_ = np.dstack((top[0], bottom[0]))[0]
         y_ = np.dstack((top[1], bottom[1]))[0]
-        return LineCollection(np.dstack((x_, y_)), color='k', **kwargs)
+        ax.add_collection(LineCollection(np.dstack((x_, y_)), color='k', **kwargs))
 
     def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
         from scipy.optimize import newton
@@ -213,18 +215,139 @@ def hourAngleFormatter(ra):
     minutes = '{:>02}'.format(minutes)
     return "%d:%sh" % (hours, minutes)
 
-fig = plt.figure()
+def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
+    if bgcolor is not None:
+        ax.set_axis_bgcolor(bgcolor)
+    # remove ticks as they look odd with curved/angled parallels/meridians
+    ax.xaxis.set_tick_params(which='both', length=0)
+    ax.yaxis.set_tick_params(which='both', length=0)
+
+    if aea is None:
+        if ra0 is None:
+            ra_ = np.array(ra)
+            ra_[ra_ > 180] -= 360
+            ra_[ra_ < -180] += 360
+            ra0 = np.median(ra_)
+        if dec0 is None:
+            dec0 = np.median(dec)
+        # determine standard parallels for AEA
+        dec1, dec2 = dec.min(), dec.max()
+        # move standard parallels 1/6 further in from the extremes
+        # to minimize scale variations (Snyder 1987, section 14)
+        delta_dec = (dec0 - dec1, dec2 - dec0)
+        dec1 += delta_dec[0]/7
+        dec2 -= delta_dec[1]/7
+
+        # set up AEA map
+        aea = AlbersEqualAreaProjection(ra0, dec0, dec1, dec2)
+
+    # determine x/y limits
+    x,y = aea(ra, dec)
+    xmin, xmax = x.min(), x.max()
+    ymin, ymax = y.min(), y.max()
+    delta_xy = (xmax-xmin, ymax-ymin)
+    xmin -= pad*delta_xy[0]
+    xmax += pad*delta_xy[0]
+    ymin -= pad*delta_xy[1]
+    ymax += pad*delta_xy[1]
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+
+    return aea
+
+def cloneAEAMap(ax0, ax):
+    import copy
+    ax.set_axis_bgcolor(ax0.get_axis_bgcolor())
+    # remove ticks as they look odd with curved/angled parallels/meridians
+    ax.xaxis.set_tick_params(which='both', length=0)
+    ax.yaxis.set_tick_params(which='both', length=0)
+    # set x/y limits
+    ax.set_xlim(ax0.get_xlim())
+    ax.set_ylim(ax0.get_ylim())
+
+# get RA/Dec from FITS catalog (with optional row query),
+# bin them in healpix cells,
+# return counts and center coordinates for non-zero count cells
+def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
+    import healpy as hp
+    # get healpix pixels
+    ipix = hp.ang2pix(nside, (90-dec)/180*np.pi, ra/180*np.pi, nest=False)
+    # count how often each pixel is hit
+    bc = np.bincount(ipix)
+    pixels = np.nonzero(bc)[0]
+    bc = bc[bc>0] / hp.nside2resol(nside, arcmin=True)**2 # in arcmin^-2
+    # get position of each pixel in RA/Dec
+    theta, phi = hp.pix2ang(nside, pixels, nest=False)
+    ra_ = phi*180/np.pi
+    dec_ = 90 - theta*180/np.pi
+
+    # get the vertices that confine each pixel
+    # convert to RA/Dec
+    if return_vertices:
+        vertices = np.zeros((pixels.size, 4, 2))
+        for i in xrange(pixels.size):
+            corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i])))
+            vertices[i,:,0] = corners[1] * 180./np.pi
+            vertices[i,:,1] = 90.0 - corners[0] * 180/np.pi
+        return bc, ra_, dec_, vertices
+    else:
+        return bc, ra_, dec_
+
+def plotHealpixPolygons(ax, projection, vertices, color=None, vmin=None, vmax=None, **kwargs):
+    from matplotlib.collections import PolyCollection
+    vertices_ = np.empty_like(vertices)
+    vertices_[:,:,0], vertices_[:,:,1] = projection(vertices[:,:,0], vertices[:,:,1])
+    coll = PolyCollection(vertices_, array=color, **kwargs)
+    coll.set_clim(vmin=vmin, vmax=vmax)
+    coll.set_edgecolor("face")
+    ax.add_collection(coll)
+    return coll
+
+# load RA/Dec from catalog
+import fitsio
+fits = fitsio.FITS('lens_gold_y1a1_v1.fits')
+w = fits[1].where('DEC < - 35')
+ra_dec = fits[1]['RA', 'DEC'][w]
+fits.close()
+
+# get count in healpix cells
+nside = 512
+bc, ra, dec, vertices = getCountAtLocations(ra_dec['RA'], ra_dec['DEC'], nside=nside, return_vertices=True)
+
+# setup map
+fig = plt.figure(figsize=(12,6))
+cmap = cm.YlOrRd
 ax = fig.add_subplot(111, aspect='equal')
-aea = AlbersEqualAreaProjection(60, 0., -20, 10)
-meridians = np.linspace(-90, 90, 13)
+
+aea = createAEAMap(ax, ra, dec)
+meridians = np.linspace(-90, 0, 19)
 parallels = np.linspace(0, 360, 25)
-patches = aea.getMeridianPatches(meridians, linestyle=':', lw=0.5)
-ax.add_collection(patches)
-patches = aea.getParallelPatches(parallels, linestyle=':', lw=0.5)
-ax.add_collection(patches)
-ax.set_xlim(-0.8, 0.8)
-ax.set_ylim(-0.8, 0.8)
+aea.setMeridianPatches(ax, meridians, linestyle=':', lw=0.5, zorder=1)
+aea.setParallelPatches(ax, parallels, linestyle=':', lw=0.5, zorder=1)
 aea.setMeridianLabels(ax, meridians, loc="left", fmt=pmDegFormatter)
-aea.setParallelLabels(ax, parallels, loc="bottom", fmt=hourAngleFormatter)
-plt.tick_params(which='both', length=0)
+aea.setParallelLabels(ax, parallels, loc="top", fmt=hourAngleFormatter)
+
+# add healpix counts from vertices
+vmin = 1
+vmax = 2
+poly = plotHealpixPolygons(ax, aea, vertices, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=2, rasterized=True)
+
+# add most massive redmapper clusters
+fits = fitsio.FITS('y1a1_gold_1.0.2b-full_run_redmapper_v6.4.11_lgt5_desformat_catalog.fit')
+w = fits[1].where('LAMBDA_CHISQ > 50')
+clusters = fits[1]['RA', 'DEC', 'LAMBDA_CHISQ'][w]
+fits.close()
+x,y = aea(clusters['RA'], clusters['DEC'])
+scc = ax.scatter(x,y, c='None', s=clusters['LAMBDA_CHISQ']/4, edgecolors='#2B3856', linewidths=1, marker='o', zorder=3)
+
+# add colorbar
+divider = make_axes_locatable(ax)
+cax = divider.append_axes("right", size="2%", pad=0.0)
+cb = plt.colorbar(poly, cax=cax)
+cb.set_label('$n_{gal}$ [arcmin$^{-2}$]')
+ticks = np.linspace(vmin, vmax, 5)
+cb.set_ticks(ticks)
+cb.solids.set_edgecolor("face")
+
+# show (and save)
 plt.show()
