@@ -1,7 +1,4 @@
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import matplotlib.cm as cm
 import numpy as np
 
 class AlbersEqualAreaProjection(object):
@@ -511,6 +508,7 @@ nside = 512
 bc, ra, dec, vertices = getCountAtLocations(ra_dec['RA'], ra_dec['DEC'], nside=nside, return_vertices=True)
 
 # setup map
+import matplotlib.cm as cm
 fig = plt.figure(figsize=(12,6))
 cmap = cm.YlOrRd
 ax = fig.add_subplot(111, aspect='equal')
@@ -537,6 +535,7 @@ x,y = aea(clusters['RA'], clusters['DEC'])
 scc = ax.scatter(x,y, c='None', s=clusters['LAMBDA_CHISQ']/4, edgecolors='#2B3856', linewidths=1, marker='o', zorder=3)
 
 # add colorbar
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="2%", pad=0.0)
 cb = plt.colorbar(poly, cax=cax)
