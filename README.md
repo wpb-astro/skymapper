@@ -9,6 +9,9 @@ More projections and plot types will be added as needed. Open an issue for any s
 ## Example use
 
 ```python
+# load projection and helper functions
+from skymapper import *
+
 # load RA/Dec from catalog
 import fitsio
 fits = fitsio.FITS(catalogfile)
