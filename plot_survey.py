@@ -6,6 +6,29 @@ import numpy as np
 
 class AlbersEqualAreaProjection(object):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
+        """Albers Equal Area Projection.
+
+        AEA is a conic projection with an origin along the lines connecting
+        the poles. It preserves relative area, but is not conformal,
+        perspective or equistant.
+
+        Its preferred use of for areas with predominant east-west extent
+        at moderate latitudes.
+
+        As a conic projection, it depends on two standard parallels, i.e.
+        intersections of the cone with the sphere. To minimize scale variations,
+        these standard parallels should be chosen as small as possible while
+        spanning the range in declinations of the data.
+
+        For details, see Snyder (1987, section 14).
+
+        Args:
+            ra_0: RA that maps onto x = 0
+            dec_0: Dec that maps onto y = 0
+            dec_1: lower standard parallel
+            dec_2: upper standard parallel (must not be -dec_1)
+        """
+        # Snyder 1987, eq. 14-1 to 14-6.
         self.ra_0 = ra_0
         self.dec_0 = dec_0
         self.dec_1 = dec_1 # dec1 and dec2 only needed for __repr__
@@ -20,6 +43,16 @@ class AlbersEqualAreaProjection(object):
         return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
 
     def __call__(self, ra, dec, inverse=False):
+        """Convert RA/Dec into map coordinates, or the reverse.
+
+        Args:
+            ra:  float or array of floats
+            dec: float or array of floats
+            inverse: if True, convert from map coordinates to RA/Dec
+
+        Returns:
+            x,y with the same format as ra/dec
+        """
         if not inverse:
 
             ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
@@ -40,6 +73,19 @@ class AlbersEqualAreaProjection(object):
         return "AlbersEqualAreaProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
     def setMeridianPatches(self, ax, meridians, **kwargs):
+        """Add meridian lines to matplotlib axes.
+
+        Meridian lines in conics are circular arcs, appropriate
+        matplotlib.patches will be added to given ax.
+
+        Args:
+            ax: matplotlib axes
+            meridians: list of declinations
+            **kwargs: matplotlib.patches.Arc parameters
+
+        Returns:
+            None
+        """
         from matplotlib.patches import Arc
         from matplotlib.collections import PatchCollection
 
@@ -60,6 +106,20 @@ class AlbersEqualAreaProjection(object):
         ax.add_collection(PatchCollection(patches, match_original=True))
 
     def setParallelPatches(self, ax, parallels, **kwargs):
+        """Add parallel lines to matplotlib axes.
+
+        Parallel lines in conics are straight, appropriate
+        matplotlib.patches will be added to given ax.
+
+        Args:
+            ax: matplotlib axes
+            meridians: list of rectascensions
+            **kwargs: matplotlib.collection.LineCollection parameters
+
+        Returns:
+            None
+        """
+
         # remove duplicates
         parallels_ = np.unique(parallels % 360)
 
@@ -79,6 +139,20 @@ class AlbersEqualAreaProjection(object):
         ax.add_collection(LineCollection(np.dstack((x_, y_)), color='k', **kwargs))
 
     def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
+        """Find intersection of meridian or parallel with a vertical line.
+
+        Uses analytic solutions for intersections with medidian arcs or
+        Newton solver for intersections with parallel lines.
+
+        Args:
+            x: x coordinate of the vertical line
+            ylim: range in y for the vertical line
+            ra: if not None, search for a parallel at this ra to intersect
+            dec: if not None, search for a meridian at this dec to intersect
+
+        Returns:
+            float or None (if not solution was found)
+        """
         from scipy.optimize import newton
         if dec is not None:
             # analytic solution for intersection of circle with line at x
@@ -97,6 +171,20 @@ class AlbersEqualAreaProjection(object):
         raise NotImplementedError("specify either RA or Dec")
 
     def findIntersectionAtY(self, y, xlim, ra=None, dec=None):
+        """Find intersection of meridian or parallel with a horizontal line.
+
+        Uses analytic solutions for intersections with medidian arcs or
+        Newton solver for intersections with parallel lines.
+
+        Args:
+            y: y coordinate of the horizontal line
+            xlim: range in x for the horizontal line
+            ra: if not None, search for a parallel at this ra to intersect
+            dec: if not None, search for a meridian at this dec to intersect
+
+        Returns:
+            float or None (if not solution was found)
+        """
         from scipy.optimize import newton
         if dec is not None:
             # analytic solution for intersection of circle with line at x
@@ -115,9 +203,29 @@ class AlbersEqualAreaProjection(object):
         raise NotImplementedError("specify either RA or Dec")
 
     def degFormatter(deg):
+        """Default formatter for map labels.
+
+        Args:
+            deg: float
+        Returns:
+            string
+        """
         return "%d$^\circ$" % deg
 
-    def setMeridianLabels(self, ax, meridians, loc="left", fmt=degFormatter):
+    def setMeridianLabels(self, ax, meridians, loc="left", fmt=degFormatter, **kwargs):
+        """Add labels for meridians to matplotlib axes.
+
+        Args:
+            ax: matplotlib axes
+            meridians: list of rectascensions
+            loc: "left" or "right"
+            fmt: string formatter for labels
+            **kwargs: matplotlib tick parameters
+
+        Returns:
+            None
+        """
+
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
 
@@ -130,7 +238,7 @@ class AlbersEqualAreaProjection(object):
                     ticks.append(tick)
                     labels.append(fmt(m))
             ax.set_yticks(ticks)
-            ax.set_yticklabels(labels)
+            ax.set_yticklabels(labels, **kwargs)
 
         if loc == "right":
             ticks = []
@@ -143,11 +251,24 @@ class AlbersEqualAreaProjection(object):
             ax.yaxis.tick_right()
             ax.yaxis.set_label_position("right")
             ax.set_yticks(ticks)
-            ax.set_yticklabels(labels)
+            ax.set_yticklabels(labels, **kwargs)
 
         ax.set_ylim(ylim)
 
-    def setParallelLabels(self, ax, parallels, loc="bottom", fmt=degFormatter):
+    def setParallelLabels(self, ax, parallels, loc="bottom", fmt=degFormatter, **kwargs):
+        """Add labels for parallels to matplotlib axes.
+
+        Args:
+            ax: matplotlib axes
+            parallels: list of declinations
+            loc: "top" or "bottom"
+            fmt: string formatter for labels
+            **kwargs: matplotlib tick parameters
+
+        Returns:
+            None
+        """
+
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
 
@@ -176,7 +297,7 @@ class AlbersEqualAreaProjection(object):
                     ticks.append(tick)
                     labels.append(fmt(p))
             ax.set_xticks(ticks)
-            ax.set_xticklabels(labels)
+            ax.set_xticklabels(labels, **kwargs)
 
         if loc == "top":
             ticks = []
@@ -195,11 +316,19 @@ class AlbersEqualAreaProjection(object):
             ax.xaxis.tick_top()
             ax.xaxis.set_label_position("top")
             ax.set_xticks(ticks)
-            ax.set_xticklabels(labels)
+            ax.set_xticklabels(labels, **kwargs)
 
         ax.set_xlim(xlim)
 
 def pmDegFormatter(deg):
+    """String formatter for "+-%d^\circ"
+
+    Args:
+        deg: float
+
+    Return:
+        String
+    """
     format = "%d$^\circ$"
     if deg > 0:
         format = "$+$" + format
@@ -208,6 +337,14 @@ def pmDegFormatter(deg):
     return format % np.abs(deg)
 
 def hourAngleFormatter(ra):
+    """String formatter for "hh:mm"
+
+    Args:
+        deg: float
+
+    Return:
+        String
+    """
     if ra < 0:
         ra += 360
     hours = int(ra)/15
@@ -216,6 +353,27 @@ def hourAngleFormatter(ra):
     return "%d:%sh" % (hours, minutes)
 
 def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
+    """Set up map for AlbersEqualAreaProjection.
+
+    The function preconfigures the matplotlib axes, determines the optimal
+    standard parallels, and set the proper x/y limits to show all of ra/dec.
+
+    As a simple recommendation, the standard parallels are chosen to be 1/7th
+    closer to dec0 than the minimum and maximum declination in the data
+    (Snyder 1987, page 99).
+
+    Args:
+        ax: matplotlib axes
+        ra: list of rectascensions
+        dec: list of declinations
+        aea: if not None, use this projection to define x/y limits
+        ra0: if not None, use this as reference RA
+        dec0: if not None, use this as reference Dec
+        pad: float, how much padding between data and map boundary
+
+    Returns:
+        AlbersEqualAreaProjection or aea
+    """
     if bgcolor is not None:
         ax.set_axis_bgcolor(bgcolor)
     # remove ticks as they look odd with curved/angled parallels/meridians
@@ -256,7 +414,18 @@ def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='
     return aea
 
 def cloneAEAMap(ax0, ax):
-    import copy
+    """Convenience function to copy the setup of a map axes.
+
+    Note that this sets up the axis, in particular the x/y limits, but does
+    not clone any content (data or meridian/parellel patches or labels).
+
+    Args:
+        ax0: previousely configured matplotlib axes
+        ax: axes to be configured
+
+    Returns:
+        None
+    """
     ax.set_axis_bgcolor(ax0.get_axis_bgcolor())
     # remove ticks as they look odd with curved/angled parallels/meridians
     ax.xaxis.set_tick_params(which='both', length=0)
@@ -265,10 +434,24 @@ def cloneAEAMap(ax0, ax):
     ax.set_xlim(ax0.get_xlim())
     ax.set_ylim(ax0.get_ylim())
 
-# get RA/Dec from FITS catalog (with optional row query),
-# bin them in healpix cells,
-# return counts and center coordinates for non-zero count cells
 def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
+    """Get number density of objects from RA/Dec in HealPix cells.
+
+    Requires: healpy
+
+    Args:
+        ra: list of rectascensions
+        dec: list of declinations
+        nside: HealPix nside
+        return_vertices: whether to also return the boundaries of HealPix cells
+
+    Returns:
+        bc, ra_, dec_, [vertices]
+        bc: count of objects [per arcmin^2] in a HealPix cell if count > 0
+        ra_: rectascension of the cell center (same format as ra/dec)
+        dec_: declinations of the cell center (same format as ra/dec)
+        vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
+    """
     import healpy as hp
     # get healpix pixels
     ipix = hp.ang2pix(nside, (90-dec)/180*np.pi, ra/180*np.pi, nest=False)
@@ -294,6 +477,19 @@ def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
         return bc, ra_, dec_
 
 def plotHealpixPolygons(ax, projection, vertices, color=None, vmin=None, vmax=None, **kwargs):
+    """Plot Healpix cell polygons onto map.
+
+    Args:
+        ax: matplotlib axes
+        projection: map projection
+        vertices: Healpix cell boundaries in RA/Dec, from getCountAtLocations()
+        color: string or matplib color, or numeric array to set polygon colors
+        vmin: if color is numeric array, use vmin to set color of minimum
+        vmax: if color is numeric array, use vmin to set color of minimum
+        **kwargs: matplotlib.collections.PolyCollection keywords
+    Returns:
+        matplotlib.collections.PolyCollection
+    """
     from matplotlib.collections import PolyCollection
     vertices_ = np.empty_like(vertices)
     vertices_[:,:,0], vertices_[:,:,1] = projection(vertices[:,:,0], vertices[:,:,1])
