@@ -2,7 +2,9 @@
 
 A number of python / matplotlib scripts to map astronomical survey data from the celestial sphere onto 2D. 
 
-Currently the only map projection available is Albers Equal Area conic projection (an explanation why exaclty this one is coming soon). This can be used to plot any point data or HealPix polygons onto regular matplotlib axes.
+The code requires matplotlib and numpy, but is independent of Basemap (which is not part of matplotlib distributions any more).
+
+Currently the only map projection available is Albers Equal Area conic projection (an explanation why exactly this one is coming soon). This can be used to plot any point data or HealPix polygons onto regular matplotlib axes.
 
 More projections and plot types will be added as needed. Open an issue for any such request.
 
