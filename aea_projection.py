@@ -1,3 +1,6 @@
+# Taken from http://matplotlib.org/examples/api/custom_projection_example.html
+# and adapted to Albers Equal Area transform.
+# CAUTION: This implementation does *not* work!
 from __future__ import unicode_literals
 
 import matplotlib
@@ -21,10 +24,9 @@ import numpy as np
 
 class AlbersEqualAreaAxes(Axes):
     """
-    A custom class for the Aitoff-Hammer projection, an equal-area map
-    projection.
+    A custom class for the Albers Equal Area projection.
 
-    http://en.wikipedia.org/wiki/Hammer_projection
+    https://en.wikipedia.org/wiki/Albers_projection
     """
     # The projection must specify a name.  This will be used be the
     # user to select the projection, i.e. ``subplot(111,
