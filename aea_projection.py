@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 
 import matplotlib
 from matplotlib.axes import Axes
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Polygon
 from matplotlib.path import Path
 from matplotlib.ticker import NullLocator, Formatter, FixedLocator
 from matplotlib.transforms import Affine2D, BboxTransformTo, Transform
@@ -149,7 +149,7 @@ class AlbersEqualAreaAxes(Axes):
         self._xaxis_text1_transform = \
             Affine2D().scale(1.0, 0.0) + \
             self.transData + \
-            Affine2D().translate(0.0, 0.0)
+            Affine2D().translate(0.0, -0.0)
         self._xaxis_text2_transform = \
             Affine2D().scale(1.0, 0.0) + \
             self.transData + \
@@ -162,50 +162,49 @@ class AlbersEqualAreaAxes(Axes):
         # space to display space.  The tick labels will be offset 4
         # pixels from the edge of the axes ellipse.
         self._yaxis_stretch = Affine2D().scale(360, 1.0).translate(0.0, 0.0)
-        yaxis_space = Affine2D().scale(1.0, 1.0)
         self._yaxis_transform = \
             self._yaxis_stretch + \
             self.transData
         yaxis_text_base = \
             self._yaxis_stretch + \
             self.transProjection + \
-            (yaxis_space +
-             self.transAffine +
+            (self.transAffine +
              self.transAxes)
         self._yaxis_text1_transform = \
             yaxis_text_base + \
-            Affine2D().translate(-8.0, 0.0)
+            Affine2D().translate(8.0, 0.0)
         self._yaxis_text2_transform = \
             yaxis_text_base + \
-            Affine2D().translate(8.0, 0.0)
-
-        self._update_affine()
+            Affine2D().translate(-8.0, 0.0)
 
     def _update_affine(self):
         x0, x1 = self.get_xlim()
         y0, y1 = self.get_ylim()
+
+        self.patch.set_xy([(x0, y0), (x0, y1), (x1, y1), (x1, y0)])
+        self.patch.set_transform(self.transData)
+
         ra_0 = self.transProjection.ra_0
         if (x0 - x1) % 360. == 0:
             x0 = ra_0 - 180.
             x1 = ra_0 + 180.
             
-        print (x0, x1, y0, y1)
         edges = self.transProjection.transform_non_affine(
             np.array([[x0, y0], [x1, y0], [ra_0, y0], [x0, y1], [x1, y1]]))
 
         x_0 = edges[0][0]
         x_1 = edges[1][0]
-        print edges
+
         if x_0 == x_1: x_1 = - x_0
+
         xscale = np.abs(x_0 - x_1)
         y_0 = edges[2][1]
         y_1 = max([edges[3][1], edges[4][1]])
         yscale = np.abs(y_0 - y_1)
 
         self.transAffine.clear() \
-            .scale(0.5 / xscale, 0.5 / yscale) \
+            .scale(0.9 / xscale, 0.9 / yscale) \
             .translate(0.5, 0.5)
-
     def get_xaxis_transform(self, which='grid'):
         """
         Override this method to provide a transformation for the
@@ -247,7 +246,7 @@ class AlbersEqualAreaAxes(Axes):
 
         Returns a tuple of the form (transform, valign, halign)
         """
-        return self._yaxis_text1_transform, 'center', 'center'
+        return self._yaxis_text1_transform, 'center', 'left'
 
     def get_yaxis_text2_transform(self, pixelPad):
         """
@@ -256,7 +255,7 @@ class AlbersEqualAreaAxes(Axes):
 
         Returns a tuple of the form (transform, valign, halign)
         """
-        return self._yaxis_text2_transform, 'center', 'center'
+        return self._yaxis_text2_transform, 'center', 'right'
 
     def _gen_axes_patch(self):
         """
@@ -267,7 +266,7 @@ class AlbersEqualAreaAxes(Axes):
         transform into an ellipse).  Any data and gridlines will be
         clipped to this shape.
         """
-        return Rectangle((0, 0), 1, 1)
+        return Polygon([(0, 0), (1, 0), (1, 1), (0, 1)], fill=False)
 
     def _gen_axes_spines(self):
         d = {
