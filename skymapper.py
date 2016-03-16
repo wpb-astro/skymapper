@@ -197,6 +197,212 @@ class AlbersEqualAreaProjection(object):
                 return None
         raise NotImplementedError("specify either RA or Dec")
 
+class LambertConformalProjection(object):
+    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+        """Lambert Conformal Conic Projection.
+
+        LCC is a conic projection with an origin along the lines connecting
+        the poles. It preserves angles, but is not equal-area,
+        perspective or equistant.
+
+        Its preferred use of for areas with predominant east-west extent
+        at higher latitudes.
+
+        As a conic projection, it depends on two standard parallels, i.e.
+        intersections of the cone with the sphere. To minimize scale variations,
+        these standard parallels should be chosen as small as possible while
+        spanning the range in declinations of the data.
+
+        For details, see Snyder (1987, section 15).
+
+        Args:
+            ra_0: RA that maps onto x = 0
+            dec_0: Dec that maps onto y = 0
+            dec_1: lower standard parallel
+            dec_2: upper standard parallel (must not be -dec_1)
+        """
+        # Snyder 1987, eq. 14-1, 14-2 and 15-1 to 15-3.
+        self.ra_0 = ra_0
+        self.dec_0 = dec_0
+        self.dec_1 = dec_1 # dec1 and dec2 only needed for __repr__
+        self.dec_2 = dec_2
+        self.deg2rad = np.pi/180
+        self.dec_max = 89.99
+
+        dec_1 *= self.deg2rad
+        dec_2 *= self.deg2rad
+        self.n = np.log(np.cos(dec_1)/np.cos(dec_2)) / \
+        (np.log(np.tan(np.pi/4 + dec_2/2)/np.tan(np.pi/4 + dec_1/2)))
+        self.F = np.cos(dec_1)*(np.tan(np.pi/4 + dec_1/2)**self.n)/self.n
+        self.rho_0 = self.__rho__(dec_0)
+
+    def __rho__(self, dec):
+        return self.F / np.tan(np.pi/4 + dec/2 * self.deg2rad)**self.n
+
+    def __call__(self, ra, dec, inverse=False):
+        """Convert RA/Dec into map coordinates, or the reverse.
+
+        Args:
+            ra:  float or array of floats
+            dec: float or array of floats
+            inverse: if True, convert from map coordinates to RA/Dec
+
+        Returns:
+            x,y with the same format as ra/dec
+        """
+        if not inverse:
+
+            ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
+            # check that ra_ is between -180 and 180 deg
+            ra_[ra_ < -180 ] += 360
+            ra_[ra_ > 180 ] -= 360
+
+            # check that dec is inside of -dec_max .. dec_max
+            dec_ = np.array([dec])
+            dec_[dec_ < -self.dec_max] = -self.dec_max
+            dec_[dec_ > self.dec_max] = self.dec_max
+
+            theta = self.n * ra_[0]
+            rho = self.__rho__(dec_[0])
+            return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
+        else:
+            # ra/dec actually x/y
+            rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2) * np.sign(self.n)
+            theta = np.arctan(ra/(self.rho_0 - dec)) / self.deg2rad
+            return self.ra_0 - theta/self.n, 2 * (np.arctan(self.F/rho)**(1./self.n) - np.pi/2) / self.deg2rad
+
+    def __repr__(self):
+        return "LambertConformalProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+
+    def getMeridianPatches(self, meridians, **kwargs):
+        """Get meridian lines in matplotlib format.
+
+        Meridian lines in conics are circular arcs, appropriate
+        matplotlib.patches will be return
+
+        Args:
+            meridians: list of declinations
+            **kwargs: matplotlib.patches.Arc parameters
+
+        Returns:
+            matplotlib.PatchCollection
+        """
+        from matplotlib.patches import Arc
+        from matplotlib.collections import PatchCollection
+
+        # get opening angle
+        origin = (0, self.rho_0)
+        top_left = self.__call__(self.ra_0 - 180, 90)
+        angle_limit = 180 - np.arctan2(origin[0]-top_left[0], origin[1]-top_left[1])/self.deg2rad
+        angle = 90
+        if self.n < 0:
+            angle = -90
+            angle_limit = 180 - angle_limit
+
+        # get radii
+        _, y = self.__call__(self.ra_0, meridians)
+        radius = np.abs(self.rho_0 - y)
+
+        patches = [Arc(origin, 2*radius[m], 2*radius[m], angle=angle, theta1=-angle_limit, theta2=angle_limit, **kwargs) for m in xrange(len(meridians))]
+        return PatchCollection(patches, match_original=True, zorder=patches[0].zorder)
+
+    def getParallelPatches(self, parallels, **kwargs):
+        """Get parallel lines in matplotlib format.
+
+        Parallel lines in conics are straight, appropriate
+        matplotlib.patches will be returned.
+
+        Args:
+            meridians: list of rectascensions
+            **kwargs: matplotlib.collection.LineCollection parameters
+
+        Returns:
+            matplotlib.LineCollection
+        """
+
+        # remove duplicates
+        parallels_ = np.unique(parallels % 360)
+
+        # the outer boundaries need to be duplicated because the same
+        # parallel appear on the left and the right side of the map
+        if self.ra_0 < 180:
+            outer = self.ra_0 - 180
+        else:
+            outer = self.ra_0 + 180
+        parallels_ = np.array(list(parallels_) + [outer])
+
+        from matplotlib.collections import LineCollection
+        top = self.__call__(parallels_, 90)
+        bottom = self.__call__(parallels_, -90)
+        x_ = np.dstack((top[0], bottom[0]))[0]
+        y_ = np.dstack((top[1], bottom[1]))[0]
+        return LineCollection(np.dstack((x_, y_)), color='k', **kwargs)
+
+    def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
+        """Find intersection of meridian or parallel with a vertical line.
+
+        Uses analytic solutions for intersections with medidian arcs or
+        Newton solver for intersections with parallel lines.
+
+        Args:
+            x: x coordinate of the vertical line
+            ylim: range in y for the vertical line
+            ra: if not None, search for a parallel at this ra to intersect
+            dec: if not None, search for a meridian at this dec to intersect
+
+        Returns:
+            float or None (if not solution was found)
+        """
+        from scipy.optimize import newton
+        if dec is not None:
+            # analytic solution for intersection of circle with line at x
+            r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
+            if np.abs(x) > np.abs(r):
+                return None
+            if self.rho_0 >= 0:
+                return self.rho_0 - np.sqrt(r**2 - x**2)
+            else:
+                return np.sqrt(r**2 - x**2) + self.rho_0
+        if ra is not None:
+            try:
+                return newton(lambda y: self.__call__(x,y,inverse=True)[0] - ra, (ylim[0] + ylim[1])/2)
+            except RuntimeError:
+                return None
+        raise NotImplementedError("specify either RA or Dec")
+
+    def findIntersectionAtY(self, y, xlim, ra=None, dec=None):
+        """Find intersection of meridian or parallel with a horizontal line.
+
+        Uses analytic solutions for intersections with medidian arcs or
+        Newton solver for intersections with parallel lines.
+
+        Args:
+            y: y coordinate of the horizontal line
+            xlim: range in x for the horizontal line
+            ra: if not None, search for a parallel at this ra to intersect
+            dec: if not None, search for a meridian at this dec to intersect
+
+        Returns:
+            float or None (if not solution was found)
+        """
+        from scipy.optimize import newton
+        if dec is not None:
+            # analytic solution for intersection of circle with line at x
+            r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
+            if np.abs(y) > np.abs(r):
+                return None
+            if self.rho_0 >= 0:
+                return self.rho_0 - np.sqrt(r**2 - y**2)
+            else:
+                return np.sqrt(r**2 - y**2) + self.rho_0
+        if ra is not None:
+            try:
+                return newton(lambda x: self.__call__(x,y,inverse=True)[0] - ra, (xlim[0] + xlim[1])/2)
+            except RuntimeError:
+                return None
+        raise NotImplementedError("specify either RA or Dec")
+
+
 
 ##### Start of free methods #####
 
@@ -388,24 +594,55 @@ def setParallelLabels(ax, proj, parallels, loc="bottom", fmt=degFormatter, **kwa
 
     ax.set_xlim(xlim)
 
-def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
-    """Set up map for AlbersEqualAreaProjection.
-
-    The function preconfigures the matplotlib axes, determines the optimal
-    standard parallels, and set the proper x/y limits to show all of ra/dec.
+def getOptimalConicProjection(ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, dec0=None):
+    """Determine optimal configuration of conic map.
 
     As a simple recommendation, the standard parallels are chosen to be 1/7th
     closer to dec0 than the minimum and maximum declination in the data
     (Snyder 1987, page 99).
 
     Args:
+        ra: list of rectascensions
+        dec: list of declinations
+        proj_class: constructor of projection class
+        ra0: if not None, use this as reference RA
+        dec0: if not None, use this as reference Dec
+
+    Returns:
+        proj_class that best holds ra/dec
+    """
+
+    if ra0 is None:
+        ra_ = np.array(ra)
+        ra_[ra_ > 180] -= 360
+        ra_[ra_ < -180] += 360
+        ra0 = np.median(ra_)
+    if dec0 is None:
+        dec0 = np.median(dec)
+    # determine standard parallels for AEA
+    dec1, dec2 = dec.min(), dec.max()
+    # move standard parallels 1/6 further in from the extremes
+    # to minimize scale variations (Snyder 1987, section 14)
+    delta_dec = (dec0 - dec1, dec2 - dec0)
+    dec1 += delta_dec[0]/7
+    dec2 -= delta_dec[1]/7
+
+    # set up AEA map
+    return proj_class(ra0, dec0, dec1, dec2)
+
+def setupConicAxes(ax, ra, dec, proj, pad=0.02, bgcolor='#aaaaaa'):
+    """Set up axes for conic projection.
+
+    The function preconfigures the matplotlib axes and sets the proper x/y
+    limits to show all of ra/dec.
+
+    Args:
         ax: matplotlib axes
         ra: list of rectascensions
         dec: list of declinations
-        aea: if not None, use this projection to define x/y limits
-        ra0: if not None, use this as reference RA
-        dec0: if not None, use this as reference Dec
+        proj: a projection instance
         pad: float, how much padding between data and map boundary
+        bgcolor: matplotlib color to be used for ax
 
     Returns:
         AlbersEqualAreaProjection or aea
@@ -416,27 +653,8 @@ def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='
     ax.xaxis.set_tick_params(which='both', length=0)
     ax.yaxis.set_tick_params(which='both', length=0)
 
-    if aea is None:
-        if ra0 is None:
-            ra_ = np.array(ra)
-            ra_[ra_ > 180] -= 360
-            ra_[ra_ < -180] += 360
-            ra0 = np.median(ra_)
-        if dec0 is None:
-            dec0 = np.median(dec)
-        # determine standard parallels for AEA
-        dec1, dec2 = dec.min(), dec.max()
-        # move standard parallels 1/6 further in from the extremes
-        # to minimize scale variations (Snyder 1987, section 14)
-        delta_dec = (dec0 - dec1, dec2 - dec0)
-        dec1 += delta_dec[0]/7
-        dec2 -= delta_dec[1]/7
-
-        # set up AEA map
-        aea = AlbersEqualAreaProjection(ra0, dec0, dec1, dec2)
-
     # determine x/y limits
-    x,y = aea(ra, dec)
+    x,y = proj(ra, dec)
     xmin, xmax = x.min(), x.max()
     ymin, ymax = y.min(), y.max()
     delta_xy = (xmax-xmin, ymax-ymin)
@@ -446,8 +664,6 @@ def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='
     ymax += pad*delta_xy[1]
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
-
-    return aea
 
 def cloneMap(ax0, ax):
     """Convenience function to copy the setup of a map axes.
@@ -469,6 +685,11 @@ def cloneMap(ax0, ax):
     # set x/y limits
     ax.set_xlim(ax0.get_xlim())
     ax.set_ylim(ax0.get_ylim())
+
+def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
+    proj = getOptimalConicProjection(ra, dec, proj_class=proj_class, ra0=ra0, dec0=dec0)
+    setupConicAxes(ax, ra, dec, proj, pad=pad, bgcolor=bgcolor)
+    return proj
 
 def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
     """Get number density of objects from RA/Dec in HealPix cells.
