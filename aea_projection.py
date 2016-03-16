@@ -114,12 +114,7 @@ class AlbersEqualAreaAxes(Axes):
         # within the axes.  The peculiar calculations of xscale and
         # yscale are specific to a Aitoff-Hammer projection, so don't
         # worry about them too much.
-        xscale = self.transProjection.xscale
-        yscale = self.transProjection.yscale
-
-        self.transAffine = Affine2D() \
-            .scale(0.5 / xscale, 0.5 / yscale) \
-            .translate(0.5, 0.5)
+        self.transAffine = Affine2D()
 
         # 3) This is the transformation from axes space to display
         # space.
@@ -166,13 +161,13 @@ class AlbersEqualAreaAxes(Axes):
         # (1, ymax).  The goal of these transforms is to go from that
         # space to display space.  The tick labels will be offset 4
         # pixels from the edge of the axes ellipse.
-        yaxis_stretch = Affine2D().scale(360, 1.0).translate(0.0, 0.0)
+        self._yaxis_stretch = Affine2D().scale(360, 1.0).translate(0.0, 0.0)
         yaxis_space = Affine2D().scale(1.0, 1.0)
         self._yaxis_transform = \
-            yaxis_stretch + \
+            self._yaxis_stretch + \
             self.transData
         yaxis_text_base = \
-            yaxis_stretch + \
+            self._yaxis_stretch + \
             self.transProjection + \
             (yaxis_space +
              self.transAffine +
@@ -183,6 +178,33 @@ class AlbersEqualAreaAxes(Axes):
         self._yaxis_text2_transform = \
             yaxis_text_base + \
             Affine2D().translate(8.0, 0.0)
+
+        self._update_affine()
+
+    def _update_affine(self):
+        x0, x1 = self.get_xlim()
+        y0, y1 = self.get_ylim()
+        ra_0 = self.transProjection.ra_0
+        if (x0 - x1) % 360. == 0:
+            x0 = ra_0 - 180.
+            x1 = ra_0 + 180.
+            
+        print (x0, x1, y0, y1)
+        edges = self.transProjection.transform_non_affine(
+            np.array([[x0, y0], [x1, y0], [ra_0, y0], [x0, y1], [x1, y1]]))
+
+        x_0 = edges[0][0]
+        x_1 = edges[1][0]
+        print edges
+        if x_0 == x_1: x_1 = - x_0
+        xscale = np.abs(x_0 - x_1)
+        y_0 = edges[2][1]
+        y_1 = max([edges[3][1], edges[4][1]])
+        yscale = np.abs(y_0 - y_1)
+
+        self.transAffine.clear() \
+            .scale(0.5 / xscale, 0.5 / yscale) \
+            .translate(0.5, 0.5)
 
     def get_xaxis_transform(self, which='grid'):
         """
@@ -277,9 +299,21 @@ class AlbersEqualAreaAxes(Axes):
     # set_xlim and set_ylim to ignore any input.  This also applies to
     # interactive panning and zooming in the GUI interfaces.
     def set_xlim(self, *args, **kwargs):
-        Axes.set_xlim(self, 0, 360)
-        Axes.set_ylim(self, -90, 90)
-    set_ylim = set_xlim
+        x0, x1 = args
+        Axes.set_xlim(self, *args, **kwargs)
+        self._yaxis_stretch\
+            .clear() \
+            .scale(x1-x0, 1.0) \
+            .translate(x0, 0.0)
+        self._update_affine()
+    def set_ylim(self, *args, **kwargs):
+        y0, y1 = args
+        Axes.set_ylim(self, *args, **kwargs)
+        self._xaxis_pretransform \
+            .clear() \
+            .scale(1.0, (y1 - y0)) \
+            .translate(0.0, y0)
+        self._update_affine()
 
     def format_coord(self, lon, lat):
         """
@@ -325,10 +359,11 @@ class AlbersEqualAreaAxes(Axes):
         """
         # Set up a FixedLocator at each of the points, evenly spaced
         # by degrees.
-        number = (360.0 / degrees) + 1
+        x0, x1 = self.get_xlim()
+        number = ((x1 - x0) / degrees) + 1
         self.xaxis.set_major_locator(
             FixedLocator(
-                np.linspace(0, 360, number, True)[1:-1]))
+                np.linspace(x0, x1, number, True)[1:-1]))
         # Set the formatter to display the tick labels in degrees,
         # rather than radians.
         self.xaxis.set_major_formatter(self.DegreeFormatter(degrees))
@@ -343,10 +378,11 @@ class AlbersEqualAreaAxes(Axes):
         """
         # Set up a FixedLocator at each of the points, evenly spaced
         # by degrees.
-        number = (180.0 / degrees) + 1
+        y0, y1 = self.get_ylim()
+        number = ((y1 - y0) / degrees) + 1
         self.yaxis.set_major_locator(
             FixedLocator(
-                np.linspace(-90, 90, number, True)[1:-1]))
+                np.linspace(y0, y1, number, True)[1:-1]))
         # Set the formatter to display the tick labels in degrees,
         # rather than radians.
         self.yaxis.set_major_formatter(self.DegreeFormatter(degrees))
@@ -366,10 +402,10 @@ class AlbersEqualAreaAxes(Axes):
         longitude_cap = degrees
         # Change the xaxis gridlines transform so that it draws from
         # -degrees to degrees, rather than -pi to pi.
-        self._xaxis_pretransform \
-            .clear() \
-            .scale(1.0, longitude_cap * 2.0) \
-            .translate(0.0, -longitude_cap)
+#        self._xaxis_pretransform \
+#            .clear() \
+#            .scale(1.0, longitude_cap * 2.0) \
+#            .translate(0.0, -longitude_cap)
 
 #    def get_data_ratio(self):
 #        """
@@ -413,21 +449,14 @@ class AlbersEqualAreaAxes(Axes):
             self.dec_0 = dec_0
             self.dec_1 = dec_1
             self.dec_2 = dec_2
+            ra_0 = ra_0 % 360
+            if ra_0 > 180: ra_0 -= 360.
             self.ra_0 = ra_0
             self.deg2rad = np.pi/180
 
             self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
             self.C = np.cos(dec_1 * self.deg2rad)**2 + 2 * self.n * np.sin(dec_1 * self.deg2rad)
             self.rho_0 = self.__rho__(dec_0)
-            edges = self.transform_non_affine(
-                np.array([[ra_0 - 180, -90], [ra_0 + 180, -90], [ra_0, -90]]))
-
-            self.x_0 = edges[0][0]
-            self.x_1 = edges[1][0]
-            self.xscale = np.abs(self.x_0 - self.x_1)
-            self.y_0 = edges[2][1]
-            self.y_1 = edges[0][1]
-            self.yscale = np.abs(self.y_0 - self.y_1)
 
         def __rho__(self, dec):
             return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
@@ -442,10 +471,11 @@ class AlbersEqualAreaAxes(Axes):
             ra = ll[:,0]
             dec = ll[:,1]
 
-            ra_ = np.array([ra - self.ra_0])# * -1 # inverse for RA
+            ra = ra % 360.
+            ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
             # check that ra_ is between -180 and 180 deg
             ra_[ra_ < -180 ] += 360
-            ra_[ra_ > 180 ] -= 360
+            ra_[ra_ >= 180 ] -= 360
 
             # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
             theta = self.n * ra_[0]
@@ -469,7 +499,7 @@ class AlbersEqualAreaAxes(Axes):
                 ipath = path.interpolated(isteps)
                 tiv = self.transform(ipath.vertices)
                 itv = Path(self.transform(path.vertices)).interpolated(isteps).vertices
-                if np.mean(np.abs(tiv - itv)) < 0.1: 
+                if np.mean(np.abs(tiv - itv)) < 0.01: 
 #                    print 'isteps', isteps
                     break
                 if isteps > 80: 
@@ -545,7 +575,7 @@ class AlbersEqualAreaAxes(Axes):
 
             rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
             theta = np.arctan(x/(self.rho_0 - y)) / self.deg2rad
-            return np.array([self.ra_0 + theta/self.n, 
+            return np.array([self.ra_0 - theta/self.n, 
                 np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
