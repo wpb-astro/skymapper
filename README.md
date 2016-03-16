@@ -4,21 +4,21 @@ A number of python / matplotlib scripts to map astronomical survey data from the
 
 The code requires matplotlib and numpy, but is independent of Basemap, which is not part of the matplotlib distributions anymore and can be *very* troublesome to install.
 
-Currently, the only map projection available is the **Albers Equal Area conic** (an explanation why exactly that one is coming soon). Once set up, it can be used to map any point data or HealPix polygons onto regular matplotlib axes. The essential parts of the workflow are
+Currently, the only two map projections available are the **Albers Equal-Area** and the **Lambert Conformal** conics (an explanation why exactly these ones, and which of both is better where, is [here](projections.md)). Once set up, either can be used to map any point data or HealPix polygons onto regular matplotlib axes. The essential parts of the workflow are
 
-1. Creating the projection with `AlbersEqualAreaAxes(ra0,dec0,dec1,dec2)`
+1. Creating the projection, e.g. with `AlbersEqualAreaAxes(ra0,dec0,dec1,dec2)`
 2. Setting up an  `matplotlib.axes` to hold the data
 3. Add data to the map
 
-The parameters of `AlbersEqualAreaAxes` are the reference point `(ra0,dec0)` that maps onto the center `(0,0)` in the map, and two additional declinations that refer to the standard parallels of the conic projection (i.e. where a cone located above one of the poles intersects with the sphere). The parallels should be chosen to cover the range of declinations in the data set.
+The parameters of `AlbersEqualAreaProjection` and `LambertConformalProjection` are the reference point `(ra0,dec0)` that maps onto the center `(0,0)` in the map, and two additional declinations that refer to the standard parallels of the conic projection (i.e. where a cone located above one of the poles intersects with the sphere). The parallels should be chosen to cover the range of declinations in the data set.
 
 Steps 1 and 2 can be combined with a convenience function:
 
  ````
-aea = createAEAMap(ax, ra, dec)
+aea = createConicMap(ax, ra, dec, proj_type=AlbersEqualAreaProjection)
  ````
 
-This method takes a predefined `axes` and lists of right ascension and declination, determines the optimal setting for `AlbersEqualAreaAxes`, and sets the axes ranges to hold all of `ra, dec`.
+This method takes a predefined `axes` and lists of right ascension and declination, determines the optimal setting for the conic projections, and sets the axes ranges to hold all of `ra, dec`.
 
 More projections and plot types will be added as needed. Open an issue for any such request.
 
@@ -60,10 +60,10 @@ aea = createAEAMap(ax, ra, dec)
 # add lines and labels for meridians/parallels (separation 5 deg)
 meridians = np.linspace(-60, -45, 4)
 parallels = np.linspace(60, 90, 7)
-aea.setMeridianPatches(ax, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
-aea.setParallelPatches(ax, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
-aea.setMeridianLabels(ax, meridians, loc="left", fmt=pmDegFormatter)
-aea.setParallelLabels(ax, parallels, loc="bottom")
+setMeridianPatches(ax, aea, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+setParallelPatches(ax, aea, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+setMeridianLabels(ax, aea, meridians, loc="left", fmt=pmDegFormatter)
+setParallelLabels(ax, aea, parallels, loc="bottom")
 
 # add healpix counts from vertices
 vmin = 4
@@ -114,14 +114,14 @@ ax = fig.add_subplot(111, aspect='equal')
 ra, dec, kappa = getKappa()
 
 # setup map: define AEA map optimal for given RA/Dec
-aea = createAEAMap(ax, ra, dec)
+aea = createConicMap(ax, ra, dec)
 # add lines and labels for meridians/parallels (separation 5 deg)
 meridians = np.linspace(-60, -45, 4)
 parallels = np.linspace(60, 90, 7)
-aea.setMeridianPatches(ax, meridians, linestyle=':', lw=0.5, zorder=2)
-aea.setParallelPatches(ax, parallels, linestyle=':', lw=0.5, zorder=2)
-aea.setMeridianLabels(ax, meridians, loc="left", fmt=pmDegFormatter)
-aea.setParallelLabels(ax, parallels, loc="bottom", fmt=hourAngleFormatter)
+setMeridianPatches(ax, aea, meridians, linestyle=':', lw=0.5, zorder=2)
+setParallelPatches(ax, aea, parallels, linestyle=':', lw=0.5, zorder=2)
+setMeridianLabels(ax, aea, meridians, loc="left", fmt=pmDegFormatter)
+setParallelLabels(ax, aea, parallels, loc="bottom", fmt=hourAngleFormatter)
 
 # convert to map coordinates and plot a marker for each point
 x,y = aea(ra, dec)
