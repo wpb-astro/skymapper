@@ -1,6 +1,6 @@
 # Skymapper
 
-A number of python / matplotlib scripts to map astronomical survey data from the celestial sphere onto 2D. More functionality will be added. The purpose of these methods is to facilitate the creating of publication-quality plots (as well as interactive graphics or movies) with a python-based workflow many astronomers are accustomed to.
+A number of python / matplotlib scripts to map astronomical survey data from the celestial sphere onto 2D. The purpose of these methods is to facilitate the creation of publication-quality plots (as well as interactive graphics or movies) with a python-based workflow many astronomers are accustomed to.
 
 The code requires matplotlib and numpy, but is independent of Basemap, which is not part of the matplotlib distributions anymore and can be *very* troublesome to install.
 
@@ -10,7 +10,7 @@ Currently, the only map projection available is the **Albers Equal Area conic** 
 2. Setting up an  `matplotlib.axes` to hold the data
 3. Add data to the map
 
-The parameters of `AlbersEqualAreaAxes` are the reference point `(ra0,dec0)` that maps onto the center `(0,0)` in the map. The two additional declinations refer to the standard parallels of the conic projection (i.e. where a cone located above one of the poles intersects with the sphere). The parallels should be chosen to cover the range of declinations in the data set.
+The parameters of `AlbersEqualAreaAxes` are the reference point `(ra0,dec0)` that maps onto the center `(0,0)` in the map, and two additional declinations that refer to the standard parallels of the conic projection (i.e. where a cone located above one of the poles intersects with the sphere). The parallels should be chosen to cover the range of declinations in the data set.
 
 Steps 1 and 2 can be combined with a convenience function:
 
@@ -26,7 +26,7 @@ More projections and plot types will be added as needed. Open an issue for any s
 
 The projection is not a full-fledged [matplotlib transformation](http://matplotlib.org/users/transforms_tutorial.html). It does allow you to zoom and drag interactively, but the tick labels and the mouse position do not update correctly. The underlying reason is that the map pretends (x,y) to be independent variables, which isn't true for a non-linear transformation.
 
-While perflectly sufficient for publication-quality plots, it's not ideal for exploratory work. A (failed) attempt of implementing a complete transform is [here](aea_projection.py), but it throws some gibberish error message. It's based on [this example](http://matplotlib.org/examples/api/custom_projection_example.html), so if you feel up to it: please give it a try!
+While perfectly sufficient for publication-quality plots, it's not ideal for exploratory work. A (failed) attempt to implement a complete transform is [here](aea_projection.py), but it throws some gibberish error message. It's based on [this example](http://matplotlib.org/examples/api/custom_projection_example.html), so if you feel up to it: please give it a try, maybe you get it to work! 
 
 ## Example uses
 
@@ -36,7 +36,7 @@ The examples are based on the [first data release](http://des.ncsa.illinois.edu/
 
 We use healpy to pixelate the sky, and count how many objects from a given catalog fall in each pixel. The relevant function call is `getCountAtLocations`, which returns a list of counts (in units of 1/arcmin^2), cell RA and Dec, and (optionally) the vertices of a polygon that confines the cell, for each cell with non-zero count.
 
-We tranform those vertices and put them as polygons onto the map. We finish up with a decent looking colorbar.
+We transform those vertices and put them as polygons onto the map. We finish up with a decent looking colorbar.
 
 ```python
 # load projection and helper functions
