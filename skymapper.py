@@ -495,3 +495,39 @@ def plotHealpixPolygons(ax, projection, vertices, color=None, vmin=None, vmax=No
     coll.set_edgecolor("face")
     ax.add_collection(coll)
     return coll
+
+def getMarkerSizeToFill(fig, ax, x, y):
+    """Get the size of a marker so that data points can fill axes.
+
+    Assuming that x/y span a rectangle inside of ax, this method computes
+    a best guess of the marker size to completely fill the area.
+
+    Note: The marker area calculation in matplotlib seems to assume a square
+          shape. If others shapes are desired (e.g. 'h'), a mild increase in
+          size will be necessary.
+
+    Args:
+        fig: matplotlib.figure
+        ax: matplib.axes that should hold x,y
+        x, y: list of map positions
+
+    Returns:
+        int, the size (actually: area) to be used for scatter(..., s= )
+    """
+    # get size of bounding box in pixels
+    # from http://stackoverflow.com/questions/19306510/determine-matplotlib-axis-size-in-pixels
+    from math import ceil
+    bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    width, height = bbox.width, bbox.height
+    width *= fig.dpi
+    height *= fig.dpi
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    dx = x.max() - x.min()
+    dy = y.max() - y.min()
+    filling_x = dx / (xlim[1] - xlim[0])
+    filling_y = dy / (ylim[1] - ylim[0])
+    # assuming x,y to ~fill a rectangle: get the point density
+    area = filling_x*filling_y * width * height
+    s = area / x.size
+    return int(ceil(s)) # round up to be on the safe side
