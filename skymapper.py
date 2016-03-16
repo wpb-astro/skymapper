@@ -462,7 +462,7 @@ def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
     dec_ = 90 - theta*180/np.pi
 
     # get the vertices that confine each pixel
-    # convert to RA/Dec
+    # convert to RA/Dec (thanks to Eric Huff)
     if return_vertices:
         vertices = np.zeros((pixels.size, 4, 2))
         for i in xrange(pixels.size):
