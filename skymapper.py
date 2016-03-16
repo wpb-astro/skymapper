@@ -69,19 +69,18 @@ class AlbersEqualAreaProjection(object):
     def __repr__(self):
         return "AlbersEqualAreaProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
-    def setMeridianPatches(self, ax, meridians, **kwargs):
-        """Add meridian lines to matplotlib axes.
+    def getMeridianPatches(self, meridians, **kwargs):
+        """Get meridian lines in matplotlib format.
 
         Meridian lines in conics are circular arcs, appropriate
-        matplotlib.patches will be added to given ax.
+        matplotlib.patches will be return
 
         Args:
-            ax: matplotlib axes
             meridians: list of declinations
             **kwargs: matplotlib.patches.Arc parameters
 
         Returns:
-            None
+            matplotlib.PatchCollection
         """
         from matplotlib.patches import Arc
         from matplotlib.collections import PatchCollection
@@ -100,21 +99,20 @@ class AlbersEqualAreaProjection(object):
         radius = np.abs(self.rho_0 - y)
 
         patches = [Arc(origin, 2*radius[m], 2*radius[m], angle=angle, theta1=-angle_limit, theta2=angle_limit, **kwargs) for m in xrange(len(meridians))]
-        ax.add_collection(PatchCollection(patches, match_original=True, zorder=patches[0].zorder))
+        return PatchCollection(patches, match_original=True, zorder=patches[0].zorder)
 
-    def setParallelPatches(self, ax, parallels, **kwargs):
-        """Add parallel lines to matplotlib axes.
+    def getParallelPatches(self, parallels, **kwargs):
+        """Get parallel lines in matplotlib format.
 
         Parallel lines in conics are straight, appropriate
-        matplotlib.patches will be added to given ax.
+        matplotlib.patches will be returned.
 
         Args:
-            ax: matplotlib axes
             meridians: list of rectascensions
             **kwargs: matplotlib.collection.LineCollection parameters
 
         Returns:
-            None
+            matplotlib.LineCollection
         """
 
         # remove duplicates
@@ -133,7 +131,7 @@ class AlbersEqualAreaProjection(object):
         bottom = self.__call__(parallels_, -90)
         x_ = np.dstack((top[0], bottom[0]))[0]
         y_ = np.dstack((top[1], bottom[1]))[0]
-        ax.add_collection(LineCollection(np.dstack((x_, y_)), color='k', **kwargs))
+        return LineCollection(np.dstack((x_, y_)), color='k', **kwargs)
 
     def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
         """Find intersection of meridian or parallel with a vertical line.
@@ -199,123 +197,54 @@ class AlbersEqualAreaProjection(object):
                 return None
         raise NotImplementedError("specify either RA or Dec")
 
-    def degFormatter(deg):
-        """Default formatter for map labels.
 
-        Args:
-            deg: float
-        Returns:
-            string
-        """
-        return "%d$^\circ$" % deg
+##### Start of free methods #####
 
-    def setMeridianLabels(self, ax, meridians, loc="left", fmt=degFormatter, **kwargs):
-        """Add labels for meridians to matplotlib axes.
+def setMeridianPatches(ax, proj, meridians, **kwargs):
+    """Add meridian lines to matplotlib axes.
 
-        Args:
-            ax: matplotlib axes
-            meridians: list of rectascensions
-            loc: "left" or "right"
-            fmt: string formatter for labels
-            **kwargs: matplotlib tick parameters
+    Meridian lines in conics are circular arcs, appropriate
+    matplotlib.patches will be added to given ax.
 
-        Returns:
-            None
-        """
+    Args:
+        ax: matplotlib axes
+        proj: a projection class
+        meridians: list of declinations
+        **kwargs: matplotlib.patches.Arc parameters
 
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
+    Returns:
+        None
+    """
+    patches = proj.getMeridianPatches(meridians, **kwargs)
+    ax.add_collection(patches)
 
-        if loc == "left":
-            ticks = []
-            labels = []
-            for m in meridians:
-                tick = self.findIntersectionAtX(xlim[0], ylim, dec=m)
-                if tick is not None:
-                    ticks.append(tick)
-                    labels.append(fmt(m))
-            ax.set_yticks(ticks)
-            ax.set_yticklabels(labels, **kwargs)
+def setParallelPatches(ax, proj, parallels, **kwargs):
+    """Add parallel lines to matplotlib axes.
 
-        if loc == "right":
-            ticks = []
-            labels = []
-            for m in meridians:
-                tick = self.findIntersectionAtX(xlim[1], ylim, dec=m)
-                if tick is not None:
-                    ticks.append(tick)
-                    labels.append(fmt(m))
-            ax.yaxis.tick_right()
-            ax.yaxis.set_label_position("right")
-            ax.set_yticks(ticks)
-            ax.set_yticklabels(labels, **kwargs)
+    Parallel lines in conics are straight, appropriate
+    matplotlib.patches will be added to given ax.
 
-        ax.set_ylim(ylim)
+    Args:
+        ax: matplotlib axes
+        proj: a projection class
+        meridians: list of rectascensions
+        **kwargs: matplotlib.collection.LineCollection parameters
 
-    def setParallelLabels(self, ax, parallels, loc="bottom", fmt=degFormatter, **kwargs):
-        """Add labels for parallels to matplotlib axes.
+    Returns:
+        None
+    """
+    patches = proj.getParallelPatches(parallels, **kwargs)
+    ax.add_collection(patches)
 
-        Args:
-            ax: matplotlib axes
-            parallels: list of declinations
-            loc: "top" or "bottom"
-            fmt: string formatter for labels
-            **kwargs: matplotlib tick parameters
+def degFormatter(deg):
+    """Default formatter for map labels.
 
-        Returns:
-            None
-        """
-
-        xlim = ax.get_xlim()
-        ylim = ax.get_ylim()
-
-        # remove duplicates
-        parallels_ = np.unique(parallels % 360)
-
-        # the outer boundaries need to be duplicated because the same
-        # parallel appears on the left and the right side of the map
-        if self.ra_0 < 180:
-            outer = self.ra_0 - 180
-        else:
-            outer = self.ra_0 + 180
-        parallels_ = np.array(list(parallels_) + [outer])
-
-        if loc == "bottom":
-            ticks = []
-            labels = []
-            for p in parallels_:
-                p_ = p
-                if p - self.ra_0 < -180:
-                    p_ += 360
-                if p - self.ra_0 > 180:
-                    p_ -= 360
-                tick = self.findIntersectionAtY(ylim[0], xlim, ra=p_)
-                if tick is not None:
-                    ticks.append(tick)
-                    labels.append(fmt(p))
-            ax.set_xticks(ticks)
-            ax.set_xticklabels(labels, **kwargs)
-
-        if loc == "top":
-            ticks = []
-            labels = []
-            for p in parallels_:
-                p_ = p
-                # center of map is at ra=ra_0: wrap it around
-                if p - self.ra_0 < -180:
-                    p_ += 360
-                if p - self.ra_0 > 180:
-                    p_ -= 360
-                tick = self.findIntersectionAtY(ylim[1], xlim, ra=p_)
-                if tick is not None:
-                    ticks.append(tick)
-                    labels.append(fmt(p))
-            ax.xaxis.tick_top()
-            ax.xaxis.set_label_position("top")
-            ax.set_xticks(ticks)
-            ax.set_xticklabels(labels, **kwargs)
-
-        ax.set_xlim(xlim)
+    Args:
+        deg: float
+    Returns:
+        string
+    """
+    return "%d$^\circ$" % deg
 
 def pmDegFormatter(deg):
     """String formatter for "+-%d^\circ"
@@ -348,6 +277,116 @@ def hourAngleFormatter(ra):
     minutes = int(float(ra - hours*15)/15 * 60)
     minutes = '{:>02}'.format(minutes)
     return "%d:%sh" % (hours, minutes)
+
+def setMeridianLabels(ax, proj, meridians, loc="left", fmt=degFormatter, **kwargs):
+    """Add labels for meridians to matplotlib axes.
+
+    Args:
+        ax: matplotlib axes
+        proj: a projection class
+        meridians: list of rectascensions
+        loc: "left" or "right"
+        fmt: string formatter for labels
+        **kwargs: matplotlib tick parameters
+
+    Returns:
+        None
+    """
+
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    if loc == "left":
+        ticks = []
+        labels = []
+        for m in meridians:
+            tick = proj.findIntersectionAtX(xlim[0], ylim, dec=m)
+            if tick is not None:
+                ticks.append(tick)
+                labels.append(fmt(m))
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(labels, **kwargs)
+
+    if loc == "right":
+        ticks = []
+        labels = []
+        for m in meridians:
+            tick = proj.findIntersectionAtX(xlim[1], ylim, dec=m)
+            if tick is not None:
+                ticks.append(tick)
+                labels.append(fmt(m))
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(labels, **kwargs)
+
+    ax.set_ylim(ylim)
+
+def setParallelLabels(ax, proj, parallels, loc="bottom", fmt=degFormatter, **kwargs):
+    """Add labels for parallels to matplotlib axes.
+
+    Args:
+        ax: matplotlib axes
+        proj: a projection class
+        parallels: list of declinations
+        loc: "top" or "bottom"
+        fmt: string formatter for labels
+        **kwargs: matplotlib tick parameters
+
+    Returns:
+        None
+    """
+
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    # remove duplicates
+    parallels_ = np.unique(parallels % 360)
+
+    # the outer boundaries need to be duplicated because the same
+    # parallel appears on the left and the right side of the map
+    if proj.ra_0 < 180:
+        outer = proj.ra_0 - 180
+    else:
+        outer = proj.ra_0 + 180
+    parallels_ = np.array(list(parallels_) + [outer])
+
+    if loc == "bottom":
+        ticks = []
+        labels = []
+        for p in parallels_:
+            p_ = p
+            if p - proj.ra_0 < -180:
+                p_ += 360
+            if p - proj.ra_0 > 180:
+                p_ -= 360
+            tick = proj.findIntersectionAtY(ylim[0], xlim, ra=p_)
+            if tick is not None:
+                ticks.append(tick)
+                labels.append(fmt(p))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(labels, **kwargs)
+
+    if loc == "top":
+        ticks = []
+        labels = []
+        for p in parallels_:
+            p_ = p
+            # center of map is at ra=ra_0: wrap it around
+            if p - proj.ra_0 < -180:
+                p_ += 360
+            if p - proj.ra_0 > 180:
+                p_ -= 360
+            tick = proj.findIntersectionAtY(ylim[1], xlim, ra=p_)
+            if tick is not None:
+                ticks.append(tick)
+                labels.append(fmt(p))
+        ax.xaxis.tick_top()
+        ax.xaxis.set_label_position("top")
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(labels, **kwargs)
+
+    ax.set_xlim(xlim)
 
 def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
     """Set up map for AlbersEqualAreaProjection.
@@ -410,7 +449,7 @@ def createAEAMap(ax, ra, dec, aea=None, ra0=None, dec0=None, pad=0.02, bgcolor='
 
     return aea
 
-def cloneAEAMap(ax0, ax):
+def cloneMap(ax0, ax):
     """Convenience function to copy the setup of a map axes.
 
     Note that this sets up the axis, in particular the x/y limits, but does
