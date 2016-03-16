@@ -183,11 +183,6 @@ class AlbersEqualAreaAxes(Axes):
 
         ra_0 = self.transProjection.ra_0
 
-        #FIXME: is this relevant?
-        if (x0 - x1) % 360. == 0:
-            x0 = ra_0 - 180.
-            x1 = ra_0 + 180.
-            
         edges = self.transProjection.transform_non_affine(
             np.array([[x0, y0], [x1, y0], [ra_0, y0], [x0, y1], [x1, y1]]))
 
@@ -202,7 +197,7 @@ class AlbersEqualAreaAxes(Axes):
         yscale = np.abs(y_0 - y_1)
 
         self.transAffine.clear() \
-            .scale(0.9 / xscale, 0.9 / yscale) \
+            .scale(0.9 / xscale, 0.9 / yscale) 
             .translate(0.5, 0.5)
 
         xy = [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
