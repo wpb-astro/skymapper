@@ -100,7 +100,7 @@ class AlbersEqualAreaProjection(object):
         radius = np.abs(self.rho_0 - y)
 
         patches = [Arc(origin, 2*radius[m], 2*radius[m], angle=angle, theta1=-angle_limit, theta2=angle_limit, **kwargs) for m in xrange(len(meridians))]
-        ax.add_collection(PatchCollection(patches, match_original=True))
+        ax.add_collection(PatchCollection(patches, match_original=True, zorder=patches[0].zorder))
 
     def setParallelPatches(self, ax, parallels, **kwargs):
         """Add parallel lines to matplotlib axes.
