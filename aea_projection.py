@@ -311,7 +311,7 @@ class AlbersEqualAreaAxes(Axes):
         # by degrees.
         number = (360.0 / degrees) + 1
         self.xaxis.set_major_locator(
-            plt.FixedLocator(
+            FixedLocator(
                 np.linspace(-np.pi, np.pi, number, True)[1:-1]))
         # Set the formatter to display the tick labels in degrees,
         # rather than radians.
@@ -392,7 +392,7 @@ class AlbersEqualAreaAxes(Axes):
         output_dims = 2
         is_separable = False
 
-        def __init__(self, ra_0=0, dec_0=0, dec_1=-30, dec_2=30, **kwargs):
+        def __init__(self, ra_0=0, dec_0=0, dec_1=-30, dec_2=32, **kwargs):
             Transform.__init__(self, **kwargs)
             self.dec_0 = dec_0
             self.dec_1 = dec_1
@@ -424,7 +424,10 @@ class AlbersEqualAreaAxes(Axes):
             # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
             theta = self.n * ra_[0]
             rho = self.__rho__(dec)
-            return np.concatenate((rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)), 1)
+            return np.array([
+                rho*np.sin(theta * self.deg2rad), 
+                 self.rho_0 - rho*np.cos(theta * self.deg2rad)]).T
+                 
 
         # This is where things get interesting.  With this projection,
         # straight lines in data space become curves in display space.
