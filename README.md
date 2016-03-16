@@ -6,7 +6,7 @@ The code requires matplotlib and numpy, but is independent of Basemap, which is 
 
 Currently, the only two map projections available are the **Albers Equal-Area** and the **Lambert Conformal** conics (an explanation why exactly these ones, and which of both is better where, is [here](projections.md)). Once set up, either can be used to map any point data or HealPix polygons onto regular matplotlib axes. The essential parts of the workflow are
 
-1. Creating the projection, e.g. with `AlbersEqualAreaAxes(ra0,dec0,dec1,dec2)`
+1. Creating the projection, e.g. with `AlbersEqualAreaProjection(ra0,dec0,dec1,dec2)`
 2. Setting up an  `matplotlib.axes` to hold the data
 3. Add data to the map
 
