@@ -181,10 +181,9 @@ class AlbersEqualAreaAxes(Axes):
         x0, x1 = self.get_xlim()
         y0, y1 = self.get_ylim()
 
-        self.patch.set_xy([(x0, y0), (x0, y1), (x1, y1), (x1, y0)])
-        self.patch.set_transform(self.transData)
-
         ra_0 = self.transProjection.ra_0
+
+        #FIXME: is this relevant?
         if (x0 - x1) % 360. == 0:
             x0 = ra_0 - 180.
             x1 = ra_0 + 180.
@@ -205,6 +204,11 @@ class AlbersEqualAreaAxes(Axes):
         self.transAffine.clear() \
             .scale(0.9 / xscale, 0.9 / yscale) \
             .translate(0.5, 0.5)
+
+        xy = [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
+        self.patch.set_transform(self.transData)
+        self.patch.set_xy(xy)
+
     def get_xaxis_transform(self, which='grid'):
         """
         Override this method to provide a transformation for the
@@ -266,7 +270,7 @@ class AlbersEqualAreaAxes(Axes):
         transform into an ellipse).  Any data and gridlines will be
         clipped to this shape.
         """
-        return Polygon([(0, 0), (1, 0), (1, 1), (0, 1)], fill=False)
+        return Polygon([(0, 0), (2, 0), (2, 2), (0, 2)], fill=False)
 
     def _gen_axes_spines(self):
         d = {
@@ -470,11 +474,8 @@ class AlbersEqualAreaAxes(Axes):
             ra = ll[:,0]
             dec = ll[:,1]
 
-            ra = ra % 360.
             ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
             # check that ra_ is between -180 and 180 deg
-            ra_[ra_ < -180 ] += 360
-            ra_[ra_ >= 180 ] -= 360
 
             # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
             theta = self.n * ra_[0]
@@ -505,27 +506,8 @@ class AlbersEqualAreaAxes(Axes):
 #                    print 'diff', np.mean(np.abs(tiv - itv)) 
                     break
                 isteps = isteps * 2 
-            #return Path(self.transform(ipath.vertices), ipath.codes)
-            codes = []
-            vertices = []
-            vlast = None
-            for v, c in ipath.iter_segments(simplify=False, curves=False):
-                skip = False
-                if vlast is not None: 
-#                    print np.abs(v[0] - vlast[0])
-                    d0 = (v[0] - (self.ra_0 + 180)) 
-                    d1 = (vlast[0] - (self.ra_0 + 180))
-                    if (d0 * d1 <= 0)and not (d0 == 0 and d1 == 0):
-                        skip = True
-                if not skip:
-                    codes.append(c)
-                    vertices.append(v)
-                else:
-                    codes.append(1)
-                    vertices.append(v)
-                vlast = v
 
-            return Path(self.transform(vertices), codes)
+            return Path(tiv, ipath.codes)
 
         transform_path_non_affine.__doc__ = \
             Transform.transform_path_non_affine.__doc__
