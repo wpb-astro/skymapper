@@ -197,7 +197,7 @@ class AlbersEqualAreaAxes(Axes):
         yscale = np.abs(y_0 - y_1)
 
         self.transAffine.clear() \
-            .scale(0.9 / xscale, 0.9 / yscale) 
+            .scale(0.9 / xscale, 0.9 / yscale)  \
             .translate(0.5, 0.5)
 
         xy = [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
