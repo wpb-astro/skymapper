@@ -75,7 +75,7 @@ class AlbersEqualAreaAxes(Axes):
         # be changed by the user.  This makes the math in the
         # transformation itself easier, and since this is a toy
         # example, the easier, the better.
-        Axes.set_xlim(self, -180, 180)
+        Axes.set_xlim(self, 0, 360)
         Axes.set_ylim(self, -90, 90)
 
     def _set_lim_and_transforms(self):
@@ -166,7 +166,7 @@ class AlbersEqualAreaAxes(Axes):
         # (1, ymax).  The goal of these transforms is to go from that
         # space to display space.  The tick labels will be offset 4
         # pixels from the edge of the axes ellipse.
-        yaxis_stretch = Affine2D().scale(360, 1.0).translate(-180., 0.0)
+        yaxis_stretch = Affine2D().scale(360, 1.0).translate(0.0, 0.0)
         yaxis_space = Affine2D().scale(1.0, 1.0)
         self._yaxis_transform = \
             yaxis_stretch + \
@@ -277,7 +277,7 @@ class AlbersEqualAreaAxes(Axes):
     # set_xlim and set_ylim to ignore any input.  This also applies to
     # interactive panning and zooming in the GUI interfaces.
     def set_xlim(self, *args, **kwargs):
-        Axes.set_xlim(self, -180, 180)
+        Axes.set_xlim(self, 0, 360)
         Axes.set_ylim(self, -90, 90)
     set_ylim = set_xlim
 
@@ -328,7 +328,7 @@ class AlbersEqualAreaAxes(Axes):
         number = (360.0 / degrees) + 1
         self.xaxis.set_major_locator(
             FixedLocator(
-                np.linspace(-180, 180, number, True)[1:-1]))
+                np.linspace(0, 360, number, True)[1:-1]))
         # Set the formatter to display the tick labels in degrees,
         # rather than radians.
         self.xaxis.set_major_formatter(self.DegreeFormatter(degrees))
@@ -412,6 +412,7 @@ class AlbersEqualAreaAxes(Axes):
             Transform.__init__(self, **kwargs)
             self.dec_0 = dec_0
             self.dec_1 = dec_1
+            self.dec_2 = dec_2
             self.ra_0 = ra_0
             self.deg2rad = np.pi/180
 
@@ -463,9 +464,40 @@ class AlbersEqualAreaAxes(Axes):
         # changing the length of the data array must happen within
         # ``transform_path``.
         def transform_path_non_affine(self, path):
-            isteps = max((path._interpolation_steps, 80))
-            ipath = path.interpolated(isteps)
-            return Path(self.transform(ipath.vertices), ipath.codes)
+            isteps = path._interpolation_steps * 2
+            while True:
+                ipath = path.interpolated(isteps)
+                tiv = self.transform(ipath.vertices)
+                itv = Path(self.transform(path.vertices)).interpolated(isteps).vertices
+                if np.mean(np.abs(tiv - itv)) < 0.1: 
+#                    print 'isteps', isteps
+                    break
+                if isteps > 80: 
+#                    print 'diff', np.mean(np.abs(tiv - itv)) 
+                    break
+                isteps = isteps * 2 
+            #return Path(self.transform(ipath.vertices), ipath.codes)
+            codes = []
+            vertices = []
+            vlast = None
+            for v, c in ipath.iter_segments(simplify=False, curves=False):
+                skip = False
+                if vlast is not None: 
+#                    print np.abs(v[0] - vlast[0])
+                    d0 = (v[0] - (self.ra_0 + 180)) 
+                    d1 = (vlast[0] - (self.ra_0 + 180))
+                    if (d0 * d1 <= 0)and not (d0 == 0 and d1 == 0):
+                        skip = True
+                if not skip:
+                    codes.append(c)
+                    vertices.append(v)
+                else:
+                    codes.append(1)
+                    vertices.append(v)
+                vlast = v
+
+            return Path(self.transform(vertices), codes)
+
         transform_path_non_affine.__doc__ = \
             Transform.transform_path_non_affine.__doc__
 
@@ -513,7 +545,8 @@ class AlbersEqualAreaAxes(Axes):
 
             rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
             theta = np.arctan(x/(self.rho_0 - y)) / self.deg2rad
-            return np.concatenate((self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad), 1)
+            return np.array([self.ra_0 + theta/self.n, 
+                np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
 
