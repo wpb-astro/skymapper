@@ -139,9 +139,6 @@ class AlbersEqualAreaProjection(object):
     def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
         """Find intersection of meridian or parallel with a vertical line.
 
-        Uses analytic solutions for intersections with medidian arcs or
-        Newton solver for intersections with parallel lines.
-
         Args:
             x: x coordinate of the vertical line
             ylim: range in y for the vertical line
@@ -151,7 +148,6 @@ class AlbersEqualAreaProjection(object):
         Returns:
             float or None (if not solution was found)
         """
-        from scipy.optimize import newton
         if dec is not None:
             # analytic solution for intersection of circle with line at x
             r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
@@ -162,17 +158,19 @@ class AlbersEqualAreaProjection(object):
             else:
                 return np.sqrt(r**2 - x**2) + self.rho_0
         if ra is not None:
-            try:
-                return newton(lambda y: self.__call__(x,y,inverse=True)[0] - ra, (ylim[0] + ylim[1])/2)
-            except RuntimeError:
+            # analytic solution for intersection of line with line at y
+            top = self.__call__(ra, 90)
+            bottom = self.__call__(ra, -90)
+            delta = (top[0] - bottom[0], top[1] - bottom[1])
+            y = bottom[1] + (x - bottom[0]) * delta[1] / delta[0]
+            if y >= ylim[0] and y <= ylim[1]:
+                return y
+            else:
                 return None
         raise NotImplementedError("specify either RA or Dec")
 
     def findIntersectionAtY(self, y, xlim, ra=None, dec=None):
         """Find intersection of meridian or parallel with a horizontal line.
-
-        Uses analytic solutions for intersections with medidian arcs or
-        Newton solver for intersections with parallel lines.
 
         Args:
             y: y coordinate of the horizontal line
@@ -183,9 +181,8 @@ class AlbersEqualAreaProjection(object):
         Returns:
             float or None (if not solution was found)
         """
-        from scipy.optimize import newton
         if dec is not None:
-            # analytic solution for intersection of circle with line at x
+            # analytic solution for intersection of circle with line at y
             r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
             if np.abs(y) > np.abs(r):
                 return None
@@ -194,9 +191,14 @@ class AlbersEqualAreaProjection(object):
             else:
                 return np.sqrt(r**2 - y**2) + self.rho_0
         if ra is not None:
-            try:
-                return newton(lambda x: self.__call__(x,y,inverse=True)[0] - ra, (xlim[0] + xlim[1])/2)
-            except RuntimeError:
+            # analytic solution for intersection of line with line at y
+            top = self.__call__(ra, 90)
+            bottom = self.__call__(ra, -90)
+            delta = (top[0] - bottom[0], top[1] - bottom[1])
+            x = bottom[0] + (y - bottom[1]) * delta[0] / delta[1]
+            if x >= xlim[0] and x <= xlim[1]:
+                return x
+            else:
                 return None
         raise NotImplementedError("specify either RA or Dec")
 
@@ -240,7 +242,11 @@ class LambertConformalProjection(object):
         self.rho_0 = self.__rho__(dec_0)
 
     def __rho__(self, dec):
-        return self.F / np.tan(np.pi/4 + dec/2 * self.deg2rad)**self.n
+        # check that dec is inside of -dec_max .. dec_max
+        dec_ = np.array([dec], dtype='f8')
+        dec_[dec_ < -self.dec_max] = -self.dec_max
+        dec_[dec_ > self.dec_max] = self.dec_max
+        return self.F / np.tan(np.pi/4 + dec_[0]/2 * self.deg2rad)**self.n
 
     def __call__(self, ra, dec, inverse=False):
         """Convert RA/Dec into map coordinates, or the reverse.
@@ -260,18 +266,16 @@ class LambertConformalProjection(object):
             ra_[ra_ < -180 ] += 360
             ra_[ra_ > 180 ] -= 360
 
-            # check that dec is inside of -dec_max .. dec_max
-            dec_ = np.array([dec])
-            dec_[dec_ < -self.dec_max] = -self.dec_max
-            dec_[dec_ > self.dec_max] = self.dec_max
-
             theta = self.n * ra_[0]
-            rho = self.__rho__(dec_[0])
+            rho = self.__rho__(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
         else:
             # ra/dec actually x/y
             rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2) * np.sign(self.n)
-            theta = np.arctan(ra/(self.rho_0 - dec)) / self.deg2rad
+            if self.n >= 0:
+                theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
+            else:
+                theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
             return self.ra_0 - theta/self.n, 2 * (np.arctan(self.F/rho)**(1./self.n) - np.pi/2) / self.deg2rad
 
     def __repr__(self):
@@ -344,9 +348,6 @@ class LambertConformalProjection(object):
     def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
         """Find intersection of meridian or parallel with a vertical line.
 
-        Uses analytic solutions for intersections with medidian arcs or
-        Newton solver for intersections with parallel lines.
-
         Args:
             x: x coordinate of the vertical line
             ylim: range in y for the vertical line
@@ -356,7 +357,6 @@ class LambertConformalProjection(object):
         Returns:
             float or None (if not solution was found)
         """
-        from scipy.optimize import newton
         if dec is not None:
             # analytic solution for intersection of circle with line at x
             r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
@@ -367,17 +367,19 @@ class LambertConformalProjection(object):
             else:
                 return np.sqrt(r**2 - x**2) + self.rho_0
         if ra is not None:
-            try:
-                return newton(lambda y: self.__call__(x,y,inverse=True)[0] - ra, (ylim[0] + ylim[1])/2)
-            except RuntimeError:
+            # analytic solution for intersection of line with line at y
+            top = self.__call__(ra, 90)
+            bottom = self.__call__(ra, -90)
+            delta = (top[0] - bottom[0], top[1] - bottom[1])
+            y = bottom[1] + (x - bottom[0]) * delta[1] / delta[0]
+            if y >= ylim[0] and y <= ylim[1]:
+                return y
+            else:
                 return None
         raise NotImplementedError("specify either RA or Dec")
 
     def findIntersectionAtY(self, y, xlim, ra=None, dec=None):
         """Find intersection of meridian or parallel with a horizontal line.
-
-        Uses analytic solutions for intersections with medidian arcs or
-        Newton solver for intersections with parallel lines.
 
         Args:
             y: y coordinate of the horizontal line
@@ -388,7 +390,6 @@ class LambertConformalProjection(object):
         Returns:
             float or None (if not solution was found)
         """
-        from scipy.optimize import newton
         if dec is not None:
             # analytic solution for intersection of circle with line at x
             r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
@@ -399,9 +400,14 @@ class LambertConformalProjection(object):
             else:
                 return np.sqrt(r**2 - y**2) + self.rho_0
         if ra is not None:
-            try:
-                return newton(lambda x: self.__call__(x,y,inverse=True)[0] - ra, (xlim[0] + xlim[1])/2)
-            except RuntimeError:
+            # analytic solution for intersection of line with line at y
+            top = self.__call__(ra, 90)
+            bottom = self.__call__(ra, -90)
+            delta = (top[0] - bottom[0], top[1] - bottom[1])
+            x = bottom[0] + (y - bottom[1]) * delta[0] / delta[1]
+            if x >= xlim[0] and x <= xlim[1]:
+                return x
+            else:
                 return None
         raise NotImplementedError("specify either RA or Dec")
 
