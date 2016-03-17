@@ -324,6 +324,13 @@ class AlbersEqualAreaAxes(Axes):
     # needs to be updated too.
     def set_xlim(self, *args, **kwargs):
         Axes.set_xlim(self, *args, **kwargs)
+
+        # FIXME: wrap x0 x1 to ensure they enclose ra0.
+        x0, x1 = self.viewLim.intervalx
+        if not x0 < self.transProjection.ra_0 or \
+           not x1 > self.transProjection.ra_0:
+            raise ValueError("The given limit in RA does not enclose ra_0")
+            
         self._update_affine()
 
     def set_ylim(self, *args, **kwargs):
@@ -431,10 +438,7 @@ class AlbersEqualAreaAxes(Axes):
             self.dec_0 = dec_0
             self.dec_1 = dec_1
             self.dec_2 = dec_2
-            # wrap ra_0 into -180 to 180.
-            # FIXME: we probably don't really want this.
-            ra_0 = ra_0 % 360
-            if ra_0 > 180: ra_0 -= 360.
+
             self.ra_0 = ra_0
             self.deg2rad = np.pi/180
 
