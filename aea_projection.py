@@ -40,13 +40,13 @@ class AlbersEqualAreaAxes(Axes):
         self.ra_0 = kwargs.pop('ra_0', 0)
 
         Axes.__init__(self, *args, **kwargs)
-#        self.set_aspect(00.75, adjustable='box', anchor='C')
+
         self.cla()
 
     def _init_axis(self):
         self.xaxis = maxis.XAxis(self)
         self.yaxis = maxis.YAxis(self)
-        # Do not register xaxis or yaxis with spines -- as done in
+        # FIXME: we probably want to register axis with spines.
         # Axes._init_axis() -- until HammerAxes.xaxis.cla() works.
         #self.spines['hammer'].register_axis(self.yaxis)
         self._update_transScale()
@@ -59,9 +59,8 @@ class AlbersEqualAreaAxes(Axes):
         Axes.cla(self)
 
         # Set up a default grid spacing
-        self.set_longitude_grid(30)
-        self.set_latitude_grid(15)
-        self.set_longitude_grid_ends(75)
+        self.set_meridian_grid(30)
+        self.set_parallel_grid(15)
 
         # Turn off minor ticking altogether
         self.xaxis.set_minor_locator(NullLocator())
@@ -71,10 +70,6 @@ class AlbersEqualAreaAxes(Axes):
         self.xaxis.set_ticks_position('none')
         self.yaxis.set_ticks_position('none')
 
-        # The limits on this projection are fixed -- they are not to
-        # be changed by the user.  This makes the math in the
-        # transformation itself easier, and since this is a toy
-        # example, the easier, the better.
         self.set_xlim(0, 360)
         self.set_ylim(-90, 90)
         self.set_autoscale_on(False)
@@ -99,7 +94,7 @@ class AlbersEqualAreaAxes(Axes):
         # the inline documentation there.
 
         # The goal of the first two transformations is to get from the
-        # data space (in this case longitude and latitude) to axes
+        # data space (in this case meridian and parallel) to axes
         # space.  It is separated into a non-affine and affine part so
         # that the non-affine part does not have to be recomputed when
         # a simple affine change to the figure has been made (such as
@@ -115,6 +110,8 @@ class AlbersEqualAreaAxes(Axes):
         # within the axes.  The peculiar calculations of xscale and
         # yscale are specific to a Aitoff-Hammer projection, so don't
         # worry about them too much.
+
+        # This will be updated after the xy limits are set.
         self.transAffine = Affine2D()
 
         # 3) This is the transformation from axes space to display
@@ -148,15 +145,15 @@ class AlbersEqualAreaAxes(Axes):
             self._xaxis_pretransform + \
             self.transData
         self._xaxis_text1_transform = \
-            Affine2D().scale(1.0, 0.0) + \
+            Affine2D().scale(1.0, 1.0) + \
             self.transData + \
             Affine2D().translate(0.0, -0.0)
         self._xaxis_text2_transform = \
-            Affine2D().scale(1.0, 0.0) + \
+            Affine2D().scale(1.0, 1.0) + \
             self.transData + \
             Affine2D().translate(0.0, 0.0)
 
-        # Now set up the transforms for the latitude ticks.  The input to
+        # Now set up the transforms for the parallel ticks.  The input to
         # these transforms are in axes space in x and display space in
         # y.  Therefore, the input values will be in range (0, -ymin),
         # (1, ymax).  The goal of these transforms is to go from that
@@ -179,31 +176,48 @@ class AlbersEqualAreaAxes(Axes):
             Affine2D().translate(-8.0, 0.0)
 
     def _update_affine(self):
-        x0, x1 = self.get_xlim()
-        y0, y1 = self.get_ylim()
+        # update the transformations and clip paths
+        # after new lims are set.
+        self._yaxis_stretch\
+            .clear() \
+            .scale(self.viewLim.width, 1.0) \
+            .translate(self.viewLim.x0, 0.0)
+        self._xaxis_pretransform \
+            .clear() \
+            .scale(1.0, self.viewLim.height) \
+            .translate(0.0, self.viewLim.y0)
 
         ra_0 = self.transProjection.ra_0
 
-        edges = self.transProjection.transform_non_affine(
-            np.array([[x0, y0], [x1, y0], [ra_0, y0], [x0, y1], [x1, y1]]))
+        
+        corners_data = np.array([[self.viewLim.x0, self.viewLim.y0], 
+                      [ra_0,            self.viewLim.y0], 
+                      [self.viewLim.x1, self.viewLim.y0], 
+                      [self.viewLim.x1, self.viewLim.y1],
+                      [self.viewLim.x0, self.viewLim.y1],])
 
-        x_0 = edges[0][0]
-        x_1 = edges[1][0]
+        corners = self.transProjection.transform_non_affine(corners_data)
 
+        x_0 = corners[0][0]
+        x_1 = corners[2][0]
+
+        # special case when x_1 is wrapped back to x_0
+        # FIXME: I don't think we need it anymore.
         if x_0 == x_1: x_1 = - x_0
 
+        y_0 = corners[1][1]
+        y_1 = max([corners[3][1], corners[4][1]])
+
         xscale = np.abs(x_0 - x_1)
-        y_0 = edges[2][1]
-        y_1 = max([edges[3][1], edges[4][1]])
         yscale = np.abs(y_0 - y_1)
 
         self.transAffine.clear() \
-            .scale(0.9 / xscale, 0.9 / yscale)  \
+            .scale(0.95 / xscale, 0.95 / yscale)  \
             .translate(0.5, 0.5)
 
-        xy = [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
+        # now update the clipping path
         self.patch.set_transform(self.transData)
-        self.patch.set_xy(xy)
+        self.patch.set_xy(corners_data)
 
     def get_xaxis_transform(self, which='grid'):
         """
@@ -259,12 +273,15 @@ class AlbersEqualAreaAxes(Axes):
 
     def _gen_axes_patch(self):
         """
-        Override this method to define the shape that is used for the
-        background of the plot.  It should be a subclass of Patch.
+        ClipPath.
+        
+        Initially set to a size of 2 box in transAxes.
 
-        In this case, it is a Circle (that may be warped by the axes
-        transform into an ellipse).  Any data and gridlines will be
-        clipped to this shape.
+        After xlim and ylim are set, this will be changed to the actual
+        region in transData. 
+
+        For unclear reason the very initial clip path is always applied
+        to the grid. Therefore we set size to 2.0 to avoid bad clipping.
         """
         return Polygon([(0, 0), (2, 0), (2, 2), (0, 2)], fill=False)
 
@@ -279,7 +296,17 @@ class AlbersEqualAreaAxes(Axes):
         d['right'].set_position(('axes', 1))
         d['top'].set_position(('axes', 0))
         d['bottom'].set_position(('axes', 1))
+        #FIXME: these spines can be moved wit set_position(('axes', ?)) but 
+        # 'data' fails. Because the transformation is non-separatable, 
+        # and because spines / data makes that assumption, we probably
+        # do not have a easy way to support moving spines via native matplotlib
+        # api on data axis.
+        
+        # also the labels currently do not follow the spines. Likely because
+        # they are not registered?
+
         return d
+
     # Prevent the user from applying scales to one or both of the
     # axes.  In this particular case, scaling the axes wouldn't make
     # sense, so we don't allow it.
@@ -293,25 +320,14 @@ class AlbersEqualAreaAxes(Axes):
             raise NotImplementedError
         Axes.set_yscale(self, *args, **kwargs)
 
-    # Prevent the user from changing the axes limits.  In our case, we
-    # want to display the whole sphere all the time, so we override
-    # set_xlim and set_ylim to ignore any input.  This also applies to
-    # interactive panning and zooming in the GUI interfaces.
+    # when xlim and ylim are updated, the transformation 
+    # needs to be updated too.
     def set_xlim(self, *args, **kwargs):
-        x0, x1 = args
         Axes.set_xlim(self, *args, **kwargs)
-        self._yaxis_stretch\
-            .clear() \
-            .scale(x1-x0, 1.0) \
-            .translate(x0, 0.0)
         self._update_affine()
+
     def set_ylim(self, *args, **kwargs):
-        y0, y1 = args
         Axes.set_ylim(self, *args, **kwargs)
-        self._xaxis_pretransform \
-            .clear() \
-            .scale(1.0, (y1 - y0)) \
-            .translate(0.0, y0)
         self._update_affine()
 
     def format_coord(self, lon, lat):
@@ -348,13 +364,11 @@ class AlbersEqualAreaAxes(Axes):
             # \u00b0 : degree symbol
             return "%d\u00b0" % degrees
 
-    def set_longitude_grid(self, degrees):
+    def set_meridian_grid(self, degrees):
         """
-        Set the number of degrees between each longitude grid.
+        Set the number of degrees between each meridian grid.
 
-        This is an example method that is specific to this projection
-        class -- it provides a more convenient interface to set the
-        ticking than set_xticks would.
+        It provides a more convenient interface to set the ticking than set_xticks would.
         """
         # Set up a FixedLocator at each of the points, evenly spaced
         # by degrees.
@@ -367,13 +381,11 @@ class AlbersEqualAreaAxes(Axes):
         # rather than radians.
         self.xaxis.set_major_formatter(self.DegreeFormatter(degrees))
 
-    def set_latitude_grid(self, degrees):
+    def set_parallel_grid(self, degrees):
         """
-        Set the number of degrees between each longitude grid.
+        Set the number of degrees between each meridian grid.
 
-        This is an example method that is specific to this projection
-        class -- it provides a more convenient interface than
-        set_yticks would.
+        It provides a more convenient interface than set_yticks would.
         """
         # Set up a FixedLocator at each of the points, evenly spaced
         # by degrees.
@@ -385,35 +397,6 @@ class AlbersEqualAreaAxes(Axes):
         # Set the formatter to display the tick labels in degrees,
         # rather than radians.
         self.yaxis.set_major_formatter(self.DegreeFormatter(degrees))
-
-    def set_longitude_grid_ends(self, degrees):
-        """
-        Set the latitude(s) at which to stop drawing the longitude grids.
-
-        Often, in geographic projections, you wouldn't want to draw
-        longitude gridlines near the poles.  This allows the user to
-        specify the degree at which to stop drawing longitude grids.
-
-        This is an example method that is specific to this projection
-        class -- it provides an interface to something that has no
-        analogy in the base Axes class.
-        """
-        longitude_cap = degrees
-        # Change the xaxis gridlines transform so that it draws from
-        # -degrees to degrees, rather than -pi to pi.
-#        self._xaxis_pretransform \
-#            .clear() \
-#            .scale(1.0, longitude_cap * 2.0) \
-#            .translate(0.0, -longitude_cap)
-
-#    def get_data_ratio(self):
-#        """
-#        Return the aspect ratio of the data itself.
-#
-#        This method should be overridden by any Axes that have a
-#        fixed data ratio.
-#        """
-#        return 1.0
 
     # Interactive panning and zooming is not supported with this projection,
     # so we override all of the following methods to disable it.
@@ -448,6 +431,8 @@ class AlbersEqualAreaAxes(Axes):
             self.dec_0 = dec_0
             self.dec_1 = dec_1
             self.dec_2 = dec_2
+            # wrap ra_0 into -180 to 180.
+            # FIXME: we probably don't really want this.
             ra_0 = ra_0 % 360
             if ra_0 > 180: ra_0 -= 360.
             self.ra_0 = ra_0
@@ -471,7 +456,6 @@ class AlbersEqualAreaAxes(Axes):
             dec = ll[:,1]
 
             ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
-            # check that ra_ is between -180 and 180 deg
 
             # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
             theta = self.n * ra_[0]
@@ -490,16 +474,18 @@ class AlbersEqualAreaAxes(Axes):
         # changing the length of the data array must happen within
         # ``transform_path``.
         def transform_path_non_affine(self, path):
+            # Adaptive interpolation: 
+            # we keep adding control points, till all control points
+            # have an error of less than 0.01 (about 1%)
+            # or if the number of control points is > 80.
             isteps = path._interpolation_steps * 2
             while True:
                 ipath = path.interpolated(isteps)
                 tiv = self.transform(ipath.vertices)
                 itv = Path(self.transform(path.vertices)).interpolated(isteps).vertices
                 if np.mean(np.abs(tiv - itv)) < 0.01: 
-#                    print 'isteps', isteps
                     break
                 if isteps > 80: 
-#                    print 'diff', np.mean(np.abs(tiv - itv)) 
                     break
                 isteps = isteps * 2 
 
@@ -509,24 +495,22 @@ class AlbersEqualAreaAxes(Axes):
             Transform.transform_path_non_affine.__doc__
 
         if matplotlib.__version__ < '1.2':
-            # Note: For compatibility with matplotlib v1.1 and older, you'll
-            # need to explicitly implement a ``transform`` method as well.
-            # Otherwise a ``NotImplementedError`` will be raised. This isn't
-            # necessary for v1.2 and newer, however.
             transform = transform_non_affine
-
-            # Similarly, we need to explicitly override ``transform_path`` if
-            # compatibility with older matplotlib versions is needed. With v1.2
-            # and newer, only overriding the ``transform_path_non_affine``
-            # method is sufficient.
             transform_path = transform_path_non_affine
             transform_path.__doc__ = Transform.transform_path.__doc__
 
         def inverted(self):
-            return AlbersEqualAreaAxes.InvertedAlbersEqualAreaTransform(ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
+            return AlbersEqualAreaAxes.InvertedAlbersEqualAreaTransform(
+                        ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
         inverted.__doc__ = Transform.inverted.__doc__
 
     class InvertedAlbersEqualAreaTransform(Transform):
+        """ Inverted transform. 
+
+            This will always only give values in the prime ra0-180 ~ ra0+180 range, I believe.
+            So it is inherently broken. I wonder when matplotlib actually calls this function,
+            given that interactive is disabled.
+        """
         input_dims = 2
         output_dims = 2
         is_separable = False
@@ -545,20 +529,20 @@ class AlbersEqualAreaAxes(Axes):
         def __rho__(self, dec):
             return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
 
-
         def transform_non_affine(self, xy):
             x = xy[:,0]
             y = xy[:,1]
 
             rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
+
+            # FIXME: use arctan2 instead?
+
             theta = np.arctan(x/(self.rho_0 - y)) / self.deg2rad
             return np.array([self.ra_0 - theta/self.n, 
                 np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
 
-        # As before, we need to implement the "transform" method for
-        # compatibility with matplotlib v1.1 and older.
         if matplotlib.__version__ < '1.2':
             transform = transform_non_affine
 
@@ -583,6 +567,8 @@ if __name__ == '__main__':
     dec = np.random.uniform(size=10000, low=-90, high=90)
 
     ax = fig.add_subplot(111, aspect='equal', projection="aea", dec_1=-20., dec_2=30., ra_0=180, dec_0=0.)
+    ax.set_meridian_grid(30)
+    ax.set_parallel_grid(30)
     #ax.set_xlim(0, 360)
     #ax.set_ylim(-70, 70)
     ax.plot(ra, dec, '.')
