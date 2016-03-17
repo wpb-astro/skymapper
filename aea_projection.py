@@ -75,8 +75,9 @@ class AlbersEqualAreaAxes(Axes):
         # be changed by the user.  This makes the math in the
         # transformation itself easier, and since this is a toy
         # example, the easier, the better.
-        Axes.set_xlim(self, 0, 360)
-        Axes.set_ylim(self, -90, 90)
+        self.set_xlim(0, 360)
+        self.set_ylim(-90, 90)
+        self.set_autoscale_on(False)
 
     def _set_lim_and_transforms(self):
         """
@@ -573,8 +574,17 @@ register_projection(AlbersEqualAreaAxes)
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     # Now make a simple example using the custom projection.
-    plt.subplot(111, projection="aea")
-    p = plt.plot([-1, 1, 1], [-1, -1, 1], "o-")
-    plt.grid(True)
 
-    plt.show()
+    import numpy as np
+    import aea_projection
+    fig = plt.figure(figsize=(6, 6))
+
+    ra = np.random.uniform(size=10000, low=0, high=360)
+    dec = np.random.uniform(size=10000, low=-90, high=90)
+
+    ax = fig.add_subplot(111, aspect='equal', projection="aea", dec_1=-20., dec_2=30., ra_0=180, dec_0=0.)
+    #ax.set_xlim(0, 360)
+    #ax.set_ylim(-70, 70)
+    ax.plot(ra, dec, '.')
+    ax.grid()
+    plt.savefig('xxx.png')
