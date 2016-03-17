@@ -478,6 +478,15 @@ class AlbersEqualAreaAxes(Axes):
             # we keep adding control points, till all control points
             # have an error of less than 0.01 (about 1%)
             # or if the number of control points is > 80.
+            path = path.cleaned(curves=False)
+            v = path.vertices
+            diff = v[:, 0] - v[0, 0]
+            v00 = v[0][0] - self.ra_0 
+            while v00 > 180: v00 -= 360
+            while v00 < -180: v00 += 360
+            v00 += self.ra_0
+            v[:, 0] = v00 + diff
+
             isteps = path._interpolation_steps * 2
             while True:
                 ipath = path.interpolated(isteps)
