@@ -7,6 +7,7 @@ import matplotlib
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle, Polygon
 from matplotlib.path import Path
+from matplotlib.collections import PolyCollection
 from matplotlib.ticker import NullLocator, Formatter, FixedLocator
 from matplotlib.transforms import Affine2D, BboxTransformTo, Transform
 from matplotlib.projections import register_projection
@@ -337,6 +338,28 @@ class AlbersEqualAreaAxes(Axes):
         Axes.set_ylim(self, *args, **kwargs)
         self._update_affine()
 
+    def histmap(self, ra, dec, nside=32, weights=None, mean=False, **kwargs):
+        r = histogrammap(ra, dec, nside, weights)
+
+        if weights is not None:
+            w, N = r
+        else:
+            w = r
+        if mean:
+            mask = N != 0
+            w[mask] /= N[mask]
+        else:
+            mask = w > 0
+
+        return w, mask, self.mapshow(w, mask, nest=False, **kwargs)
+
+    def mapshow(self, map, mask, nest=False, **kwargs):
+        """ Display a healpix map """
+        v = _boundary(mask, nest)
+        coll = PolyCollection(v, array=map[mask], transform=self.transData, **kwargs)
+        self.add_collection(coll)
+        return coll
+
     def format_coord(self, lon, lat):
         """
         Override this method to change how the values are displayed in
@@ -565,6 +588,54 @@ class AlbersEqualAreaAxes(Axes):
             # The inverse of the inverse is the original transform... ;)
             return AlbersEqualAreaAxes.AlbersEqualAreaTransform(ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
         inverted.__doc__ = Transform.inverted.__doc__
+
+def _boundary(mask, nest=False):
+    """Generate healpix vertices for pixels where mask is True
+
+    Requires: healpy
+
+    Args:
+        pix: list of pixel numbers
+        nest: nested or not
+        nside: HealPix nside
+
+    Returns:
+        vertices
+        vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
+    """
+    import healpy as hp
+
+    pix = mask.nonzero()[0]
+    nside = hp.npix2nside(len(mask))
+    # get the vertices that confine each pixel
+    # convert to RA/Dec (thanks to Eric Huff)
+    vertices = np.zeros((pix.size, 4, 2))
+    for i in xrange(pix.size):
+        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pix[i],nest=nest)))
+        corners = np.degrees(corners) 
+
+        # ensure no patch wraps around.
+        diff = corners[1] - corners[1][0]
+        diff[diff > 180] -= 360
+        diff[diff < -180] += 360
+        corners[1] = corners[1][0] + diff
+
+        vertices[i,:,0] = corners[1]
+        vertices[i,:,1] = 90.0 - corners[0]
+
+    return vertices
+
+def histogrammap(ra, dec, nside=32, weights=None):
+    import healpy as hp 
+    ipix = hp.ang2pix(nside, np.radians(90-dec), np.radians(ra), nest=False)
+    npix = hp.nside2npix(nside)
+    if weights is not None:
+        w = np.bincount(ipix, weights=weights, minlength=npix)
+        N = np.bincount(ipix, minlength=npix)
+        return w, N
+    else:
+        w = 1.0 * np.bincount(ipix, minlength=npix)
+        return w
 
 # Now register the projection with matplotlib so the user can select
 # it.
