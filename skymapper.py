@@ -727,8 +727,14 @@ def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
         vertices = np.zeros((pixels.size, 4, 2))
         for i in xrange(pixels.size):
             corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i])))
-            vertices[i,:,0] = corners[1] * 180./np.pi
-            vertices[i,:,1] = 90.0 - corners[0] * 180/np.pi
+            corners = np.array(corners) * 180. / np.pi
+            diff = corners[1] - corners[1][0]
+            diff[diff > 180] -= 360
+            diff[diff < -180] += 360
+            corners[1] = corners[1][0] + diff
+            vertices[i,:,0] = corners[1]
+            vertices[i,:,1] = 90.0 - corners[0]
+            
         return bc, ra_, dec_, vertices
     else:
         return bc, ra_, dec_
