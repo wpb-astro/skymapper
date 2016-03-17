@@ -102,7 +102,7 @@ class AlbersEqualAreaAxes(Axes):
 
         # 1) The core transformation from data space into
         # rectilinear space defined in the HammerTransform class.
-        self.transProjection = self.AlbersEqualAreaTransform(ra_0=self.ra_0, 
+        self.transProjection = self.AlbersEqualAreaTransform(ra_0=self.ra_0,
                         dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
 
         # 2) The above has an output range that is not in the unit
@@ -189,10 +189,10 @@ class AlbersEqualAreaAxes(Axes):
 
         ra_0 = self.transProjection.ra_0
 
-        
-        corners_data = np.array([[self.viewLim.x0, self.viewLim.y0], 
-                      [ra_0,            self.viewLim.y0], 
-                      [self.viewLim.x1, self.viewLim.y0], 
+
+        corners_data = np.array([[self.viewLim.x0, self.viewLim.y0],
+                      [ra_0,            self.viewLim.y0],
+                      [self.viewLim.x1, self.viewLim.y0],
                       [self.viewLim.x1, self.viewLim.y1],
                       [self.viewLim.x0, self.viewLim.y1],])
 
@@ -274,11 +274,11 @@ class AlbersEqualAreaAxes(Axes):
     def _gen_axes_patch(self):
         """
         ClipPath.
-        
+
         Initially set to a size of 2 box in transAxes.
 
         After xlim and ylim are set, this will be changed to the actual
-        region in transData. 
+        region in transData.
 
         For unclear reason the very initial clip path is always applied
         to the grid. Therefore we set size to 2.0 to avoid bad clipping.
@@ -287,7 +287,7 @@ class AlbersEqualAreaAxes(Axes):
 
     def _gen_axes_spines(self):
         d = {
-            'left': mspines.Spine.linear_spine(self, spine_type='left'), 
+            'left': mspines.Spine.linear_spine(self, spine_type='left'),
             'right': mspines.Spine.linear_spine(self, spine_type='right'),
             'top': mspines.Spine.linear_spine(self, spine_type='top'),
             'bottom': mspines.Spine.linear_spine(self, spine_type='bottom'),
@@ -296,12 +296,12 @@ class AlbersEqualAreaAxes(Axes):
         d['right'].set_position(('axes', 1))
         d['top'].set_position(('axes', 0))
         d['bottom'].set_position(('axes', 1))
-        #FIXME: these spines can be moved wit set_position(('axes', ?)) but 
-        # 'data' fails. Because the transformation is non-separatable, 
+        #FIXME: these spines can be moved wit set_position(('axes', ?)) but
+        # 'data' fails. Because the transformation is non-separatable,
         # and because spines / data makes that assumption, we probably
         # do not have a easy way to support moving spines via native matplotlib
         # api on data axis.
-        
+
         # also the labels currently do not follow the spines. Likely because
         # they are not registered?
 
@@ -320,7 +320,7 @@ class AlbersEqualAreaAxes(Axes):
             raise NotImplementedError
         Axes.set_yscale(self, *args, **kwargs)
 
-    # when xlim and ylim are updated, the transformation 
+    # when xlim and ylim are updated, the transformation
     # needs to be updated too.
     def set_xlim(self, *args, **kwargs):
         Axes.set_xlim(self, *args, **kwargs)
@@ -461,10 +461,10 @@ class AlbersEqualAreaAxes(Axes):
             theta = self.n * ra_[0]
             rho = self.__rho__(dec)
             rt = np.array([
-                rho*np.sin(theta * self.deg2rad), 
+                rho*np.sin(theta * self.deg2rad),
                  self.rho_0 - rho*np.cos(theta * self.deg2rad)]).T
             if np.isnan(rt).any(): raise ValueError('abc')
-            return rt 
+            return rt
 
         # This is where things get interesting.  With this projection,
         # straight lines in data space become curves in display space.
@@ -474,7 +474,7 @@ class AlbersEqualAreaAxes(Axes):
         # changing the length of the data array must happen within
         # ``transform_path``.
         def transform_path_non_affine(self, path):
-            # Adaptive interpolation: 
+            # Adaptive interpolation:
             # we keep adding control points, till all control points
             # have an error of less than 0.01 (about 1%)
             # or if the number of control points is > 80.
@@ -483,11 +483,11 @@ class AlbersEqualAreaAxes(Axes):
                 ipath = path.interpolated(isteps)
                 tiv = self.transform(ipath.vertices)
                 itv = Path(self.transform(path.vertices)).interpolated(isteps).vertices
-                if np.mean(np.abs(tiv - itv)) < 0.01: 
+                if np.mean(np.abs(tiv - itv)) < 0.01:
                     break
-                if isteps > 80: 
+                if isteps > 80:
                     break
-                isteps = isteps * 2 
+                isteps = isteps * 2
 
             return Path(tiv, ipath.codes)
 
@@ -505,7 +505,7 @@ class AlbersEqualAreaAxes(Axes):
         inverted.__doc__ = Transform.inverted.__doc__
 
     class InvertedAlbersEqualAreaTransform(Transform):
-        """ Inverted transform. 
+        """ Inverted transform.
 
             This will always only give values in the prime ra0-180 ~ ra0+180 range, I believe.
             So it is inherently broken. I wonder when matplotlib actually calls this function,
@@ -535,10 +535,12 @@ class AlbersEqualAreaAxes(Axes):
 
             rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
 
-            # FIXME: use arctan2 instead?
-
-            theta = np.arctan(x/(self.rho_0 - y)) / self.deg2rad
-            return np.array([self.ra_0 - theta/self.n, 
+            # make sure that the signs are correct
+            if self.n >= 0:
+                theta = np.arctan2(x, self.rho_0 - y) / self.deg2rad
+            else:
+                theta = np.arctan2(-x, -(self.rho_0 - y)) / self.deg2rad
+            return np.array([self.ra_0 - theta/self.n,
                 np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
