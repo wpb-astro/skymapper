@@ -25,13 +25,12 @@ class AlbersEqualAreaProjection(object):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be -dec_1)
         """
-        # Snyder 1987, eq. 14-1 to 14-6.
         self.ra_0 = ra_0
         self.dec_0 = dec_0
         self.dec_1 = dec_1 # dec1 and dec2 only needed for __repr__
         self.dec_2 = dec_2
         self.deg2rad = np.pi/180
-
+        # Snyder 1987, eq. 14-3 to 14-6.
         self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
         self.C = np.cos(dec_1 * self.deg2rad)**2 + 2 * self.n * np.sin(dec_1 * self.deg2rad)
         self.rho_0 = self.__rho__(dec_0)
@@ -56,14 +55,18 @@ class AlbersEqualAreaProjection(object):
             # check that ra_ is between -180 and 180 deg
             ra_[ra_ < -180 ] += 360
             ra_[ra_ > 180 ] -= 360
-
+            # Snyder 1987, eq 14-1 to 14-4
             theta = self.n * ra_[0]
             rho = self.__rho__(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
         else:
             # ra/dec actually x/y
+            # Snyder 1987, eq 14-8 to 14-11
             rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2)
-            theta = np.arctan(ra/(self.rho_0 - dec)) / self.deg2rad
+            if self.n >= 0:
+                theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
+            else:
+                theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
             return self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad
 
     def __repr__(self):
@@ -734,7 +737,7 @@ def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
             corners[1] = corners[1][0] + diff
             vertices[i,:,0] = corners[1]
             vertices[i,:,1] = 90.0 - corners[0]
-            
+
         return bc, ra_, dec_, vertices
     else:
         return bc, ra_, dec_
