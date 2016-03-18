@@ -136,6 +136,10 @@ class SkymapperAxes(Axes):
             self.transAffine + \
             self.transAxes
 
+        self.transClip = \
+            self.transProjection + \
+            self.transAffine 
+
         # The main data transformation is set up.  Now deal with
         # gridlines and tick labels.
 
@@ -224,8 +228,9 @@ class SkymapperAxes(Axes):
             .translate(0.5, 0.5)
 
         # now update the clipping path
-        self.patch.set_transform(self.transData)
-        self.patch.set_xy(corners_data)
+        path = Path(corners_data)
+        path = self.transClip.transform_path(path)
+        self.patch.set_xy(path.vertices)
 
     def get_xaxis_transform(self, which='grid'):
         """
