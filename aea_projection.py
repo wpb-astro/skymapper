@@ -23,16 +23,23 @@ import numpy as np
 # (see geo.py).
 
 
-class AlbersEqualAreaAxes(Axes):
+class SkymapperAxes(Axes):
     """
-    A custom class for the Albers Equal Area projection.
+    A base class for a Skymapper axes that takes in ra_0, dec_0, dec_1, dec_2.
 
-    https://en.wikipedia.org/wiki/Albers_projection
+    The base class takes care of clipping and interpolating with matplotlib.
+    
+    Subclass and override class method get_projection_class.
+
     """
-    # The projection must specify a name.  This will be used be the
-    # user to select the projection, i.e. ``subplot(111,
-    # projection='aea')``.
-    name = 'aea'
+    # The subclass projection must specify a name.  This will be used be the
+    # user to select the projection.
+
+    name = None
+
+    @classmethod
+    def get_projection_class(kls):
+        raise NotImplementedError('Must implement this in subclass')
 
     def __init__(self, *args, **kwargs):
         self.dec_0 = kwargs.pop('dec_0', 0)
@@ -103,7 +110,7 @@ class AlbersEqualAreaAxes(Axes):
 
         # 1) The core transformation from data space into
         # rectilinear space defined in the HammerTransform class.
-        self.transProjection = self.AlbersEqualAreaTransform(ra_0=self.ra_0,
+        self.transProjection = self.get_projection_class()(ra_0=self.ra_0,
                         dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
 
         # 2) The above has an output range that is not in the unit
@@ -446,8 +453,22 @@ class AlbersEqualAreaAxes(Axes):
     def drag_pan(self, button, key, x, y):
         pass
 
-    # Now, the transforms themselves.
+# now define the Albers equal area axes
 
+class AlbersEqualAreaAxes(SkymapperAxes):
+    """
+    A custom class for the Albers Equal Area projection.
+
+    https://en.wikipedia.org/wiki/Albers_projection
+    """
+
+    name = 'aea'
+
+    @classmethod
+    def get_projection_class(kls):
+        return kls.AlbersEqualAreaTransform
+
+    # Now, the transforms themselves.
     class AlbersEqualAreaTransform(Transform):
         """
         The base Hammer transform.
@@ -589,6 +610,7 @@ class AlbersEqualAreaAxes(Axes):
             return AlbersEqualAreaAxes.AlbersEqualAreaTransform(ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
         inverted.__doc__ = Transform.inverted.__doc__
 
+# a few helper functions talking to healpy/healpix. 
 def _boundary(mask, nest=False):
     """Generate healpix vertices for pixels where mask is True
 
