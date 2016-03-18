@@ -9,7 +9,7 @@ from matplotlib.patches import Rectangle, Polygon
 from matplotlib.path import Path
 from matplotlib.collections import PolyCollection
 from matplotlib.ticker import NullLocator, Formatter, FixedLocator
-from matplotlib.transforms import Affine2D, BboxTransformTo, Transform
+from matplotlib.transforms import Affine2D, BboxTransformTo, Transform, blended_transform_factory
 from matplotlib.projections import register_projection
 import matplotlib.spines as mspines
 import matplotlib.axis as maxis
@@ -442,6 +442,11 @@ class SkymapperAxes(Axes):
 
     # Interactive panning and zooming is not supported with this projection,
     # so we override all of the following methods to disable it.
+    def _in_axes(self, mouseevent):
+        if hasattr(self._pan_trans): 
+            return True
+        else:
+            return Axes._in_axes(self, mouseevent)
 
     def can_zoom(self):
         """
@@ -450,13 +455,19 @@ class SkymapperAxes(Axes):
         return False
 
     def start_pan(self, x, y, button):
-        pass
+        self._pan_trans = self.transAxes.inverted() + \
+                blended_transform_factory(
+                        self._yaxis_stretch,
+                        self._xaxis_pretransform,)
 
     def end_pan(self):
-        pass
+        delattr(self, '_pan_trans')
 
     def drag_pan(self, button, key, x, y):
-        pass
+        pan1 = self._pan_trans.transform([(x, y)])[0]
+        self.transProjection.ra_0 = 360 - pan1[0]
+        self.transProjection.dec_0 = pan1[1]
+        self._update_affine()
 
 # now define the Albers equal area axes
 
