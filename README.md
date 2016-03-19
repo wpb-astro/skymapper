@@ -4,7 +4,7 @@ A number of python / matplotlib scripts to map astronomical survey data from the
 
 The code requires matplotlib and numpy, but is independent of Basemap, which is not part of the matplotlib distributions anymore and can be *very* troublesome to install.
 
-Currently, three map projections are available: the **Albers Equal-Area**, the **Lambert Conformal**, and the **Equidistant** conics (an explanation why exactly these ones, and which of both is better where, is [here](projections.md)). Once set up, either can be used to map any point data or HealPix polygons onto regular matplotlib axes. The essential parts of the workflow are
+Currently, three map projections are available: the **Albers Equal-Area**, the **Lambert Conformal**, and the **Equidistant** conics (an explanation why exactly these ones, and which of them is better where, is [here](projections.md)). Once set up, they can be used to map any point data or HealPix polygons onto regular matplotlib axes. The essential parts of the workflow are
 
 1. Creating the projection, e.g. with `AlbersEqualAreaProjection(ra0,dec0,dec1,dec2)`
 2. Setting up an  `matplotlib.axes` to hold the data
