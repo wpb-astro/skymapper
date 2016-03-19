@@ -21,6 +21,13 @@ class ConicProjection(object):
         self.dec_2 = dec_2
         self.deg2rad = np.pi/180
 
+    def _wrapRA(self, ra):
+        ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
+        # check that ra_ is between -180 and 180 deg
+        ra_[ra_ < -180 ] += 360
+        ra_[ra_ > 180 ] -= 360
+        return ra_
+
     def getMeridianPatches(self, meridians, **kwargs):
         """Get meridian lines in matplotlib format.
 
@@ -181,9 +188,9 @@ class AlbersEqualAreaProjection(ConicProjection):
         # Snyder 1987, eq. 14-3 to 14-6.
         self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
         self.C = np.cos(dec_1 * self.deg2rad)**2 + 2 * self.n * np.sin(dec_1 * self.deg2rad)
-        self.rho_0 = self.__rho__(dec_0)
+        self.rho_0 = self._rho(dec_0)
 
-    def __rho__(self, dec):
+    def _rho(self, dec):
         return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
 
     def __call__(self, ra, dec, inverse=False):
@@ -198,14 +205,10 @@ class AlbersEqualAreaProjection(ConicProjection):
             x,y with the same format as ra/dec
         """
         if not inverse:
-
-            ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
-            # check that ra_ is between -180 and 180 deg
-            ra_[ra_ < -180 ] += 360
-            ra_[ra_ > 180 ] -= 360
+            ra_ = self._wrapRA(ra)
             # Snyder 1987, eq 14-1 to 14-4
             theta = self.n * ra_[0]
-            rho = self.__rho__(dec)
+            rho = self._rho(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
         else:
             # ra/dec actually x/y
@@ -253,9 +256,9 @@ class LambertConformalProjection(ConicProjection):
         self.n = np.log(np.cos(dec_1)/np.cos(dec_2)) / \
         (np.log(np.tan(np.pi/4 + dec_2/2)/np.tan(np.pi/4 + dec_1/2)))
         self.F = np.cos(dec_1)*(np.tan(np.pi/4 + dec_1/2)**self.n)/self.n
-        self.rho_0 = self.__rho__(dec_0)
+        self.rho_0 = self._rho(dec_0)
 
-    def __rho__(self, dec):
+    def _rho(self, dec):
         # check that dec is inside of -dec_max .. dec_max
         dec_ = np.array([dec], dtype='f8')
         dec_[dec_ < -self.dec_max] = -self.dec_max
@@ -274,14 +277,9 @@ class LambertConformalProjection(ConicProjection):
             x,y with the same format as ra/dec
         """
         if not inverse:
-
-            ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
-            # check that ra_ is between -180 and 180 deg
-            ra_[ra_ < -180 ] += 360
-            ra_[ra_ > 180 ] -= 360
-
+            ra_ = self._wrapRA(ra)
             theta = self.n * ra_[0]
-            rho = self.__rho__(dec)
+            rho = self._rho(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
         else:
             # ra/dec actually x/y
