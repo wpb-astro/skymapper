@@ -26,7 +26,7 @@ class ConicProjection(object):
         # check that ra_ is between -180 and 180 deg
         ra_[ra_ < -180 ] += 360
         ra_[ra_ > 180 ] -= 360
-        return ra_
+        return ra_[0]
 
     def getMeridianPatches(self, meridians, **kwargs):
         """Get meridian lines in matplotlib format.
@@ -161,7 +161,7 @@ class ConicProjection(object):
 
 class AlbersEqualAreaProjection(ConicProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Albers Equal Area Projection.
+        """Albers Equal-Area projection.
 
         AEA is a conic projection with an origin along the lines connecting
         the poles. It preserves relative area, but is not conformal,
@@ -207,7 +207,7 @@ class AlbersEqualAreaProjection(ConicProjection):
         if not inverse:
             ra_ = self._wrapRA(ra)
             # Snyder 1987, eq 14-1 to 14-4
-            theta = self.n * ra_[0]
+            theta = self.n * ra_
             rho = self._rho(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
         else:
@@ -225,7 +225,7 @@ class AlbersEqualAreaProjection(ConicProjection):
 
 class LambertConformalProjection(ConicProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Lambert Conformal Conic Projection.
+        """Lambert Conformal conic projection.
 
         LCC is a conic projection with an origin along the lines connecting
         the poles. It preserves angles, but is not equal-area,
@@ -278,7 +278,7 @@ class LambertConformalProjection(ConicProjection):
         """
         if not inverse:
             ra_ = self._wrapRA(ra)
-            theta = self.n * ra_[0]
+            theta = self.n * ra_
             rho = self._rho(dec)
             return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
         else:
@@ -292,6 +292,69 @@ class LambertConformalProjection(ConicProjection):
 
     def __repr__(self):
         return "LambertConformalProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+
+
+class EquidistantProjection(ConicProjection):
+    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+        """Equidistant conic projection.
+
+        Equistant conic is a projection with an origin along the lines connecting
+        the poles. It preserves distances along the map, but is not conformal,
+        perspective or equal-area.
+
+        Its preferred use of for smaller areas with predominant east-west extent
+        at moderate latitudes.
+
+        As a conic projection, it depends on two standard parallels, i.e.
+        intersections of the cone with the sphere.
+
+        For details, see Snyder (1987, section 16).
+
+        Args:
+            ra_0: RA that maps onto x = 0
+            dec_0: Dec that maps onto y = 0
+            dec_1: lower standard parallel
+            dec_2: upper standard parallel (must not be +-dec_1)
+        """
+        ConicProjection.__init__(self, ra_0, dec_0, dec_1, dec_2)
+
+        # Snyder 1987, eq. 14-3 to 14-6.
+        self.n = (np.cos(dec_1 * self.deg2rad) - np.cos(dec_2 * self.deg2rad)) / (dec_2  - dec_1) / self.deg2rad
+        self.G = np.cos(dec_1 * self.deg2rad)/self.n + (dec_1 * self.deg2rad)
+        self.rho_0 = self._rho(dec_0)
+
+    def _rho(self, dec):
+        return self.G - (dec * self.deg2rad)
+
+    def __call__(self, ra, dec, inverse=False):
+        """Convert RA/Dec into map coordinates, or the reverse.
+
+        Args:
+            ra:  float or array of floats
+            dec: float or array of floats
+            inverse: if True, convert from map coordinates to RA/Dec
+
+        Returns:
+            x,y with the same format as ra/dec
+        """
+        if not inverse:
+            ra_ = self._wrapRA(ra)
+            # Snyder 1987, eq 16-1 to 16-4
+            theta = self.n * ra_
+            rho = self._rho(dec)
+            return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
+        else:
+            # ra/dec actually x/y
+            # Snyder 1987, eq 14-10 to 14-11
+            rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2) * np.sign(self.n)
+            if self.n >= 0:
+                theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
+            else:
+                theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
+            return self.ra_0 - theta/self.n, (self.G - rho)/ self.deg2rad
+
+    def __repr__(self):
+        return "EquidistantProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 ##### Start of free methods #####
 
@@ -513,8 +576,8 @@ def getOptimalConicProjection(ra, dec, proj_class=AlbersEqualAreaProjection, ra0
     # move standard parallels 1/6 further in from the extremes
     # to minimize scale variations (Snyder 1987, section 14)
     delta_dec = (dec0 - dec1, dec2 - dec0)
-    dec1 += delta_dec[0]/7
-    dec2 -= delta_dec[1]/7
+    dec1 += delta_dec[0]/6
+    dec2 -= delta_dec[1]/6
 
     # set up AEA map
     return proj_class(ra0, dec0, dec1, dec2)
