@@ -28,7 +28,7 @@ class SkymapperAxes(Axes):
     A base class for a Skymapper axes that takes in ra_0, dec_0, dec_1, dec_2.
 
     The base class takes care of clipping and interpolating with matplotlib.
-    
+
     Subclass and override class method get_projection_class.
 
     """
@@ -138,7 +138,7 @@ class SkymapperAxes(Axes):
 
         self.transClip = \
             self.transProjection + \
-            self.transAffine 
+            self.transAffine
 
         # The main data transformation is set up.  Now deal with
         # gridlines and tick labels.
@@ -340,10 +340,10 @@ class SkymapperAxes(Axes):
 
         # FIXME: wrap x0 x1 to ensure they enclose ra0.
         x0, x1 = self.viewLim.intervalx
-        if not x0 < self.transProjection.ra_0 or \
+        if not x0 <= self.transProjection.ra_0 or \
            not x1 > self.transProjection.ra_0:
             raise ValueError("The given limit in RA does not enclose ra_0")
-            
+
         self._update_affine()
 
     def set_ylim(self, *args, **kwargs):
@@ -443,7 +443,7 @@ class SkymapperAxes(Axes):
     # Interactive panning and zooming is not supported with this projection,
     # so we override all of the following methods to disable it.
     def _in_axes(self, mouseevent):
-        if hasattr(self._pan_trans): 
+        if hasattr(self._pan_trans):
             return True
         else:
             return Axes._in_axes(self, mouseevent)
@@ -545,7 +545,7 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             path = path.cleaned(curves=False)
             v = path.vertices
             diff = v[:, 0] - v[0, 0]
-            v00 = v[0][0] - self.ra_0 
+            v00 = v[0][0] - self.ra_0
             while v00 > 180: v00 -= 360
             while v00 < -180: v00 += 360
             v00 += self.ra_0
@@ -626,7 +626,7 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             return AlbersEqualAreaAxes.AlbersEqualAreaTransform(ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
         inverted.__doc__ = Transform.inverted.__doc__
 
-# a few helper functions talking to healpy/healpix. 
+# a few helper functions talking to healpy/healpix.
 def _boundary(mask, nest=False):
     """Generate healpix vertices for pixels where mask is True
 
@@ -650,7 +650,7 @@ def _boundary(mask, nest=False):
     vertices = np.zeros((pix.size, 4, 2))
     for i in xrange(pix.size):
         corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pix[i],nest=nest)))
-        corners = np.degrees(corners) 
+        corners = np.degrees(corners)
 
         # ensure no patch wraps around.
         diff = corners[1] - corners[1][0]
@@ -664,7 +664,7 @@ def _boundary(mask, nest=False):
     return vertices
 
 def histogrammap(ra, dec, nside=32, weights=None):
-    import healpy as hp 
+    import healpy as hp
     ipix = hp.ang2pix(nside, np.radians(90-dec), np.radians(ra), nest=False)
     npix = hp.nside2npix(nside)
     if weights is not None:
