@@ -630,7 +630,7 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             transform_path.__doc__ = Transform.transform_path.__doc__
 
         def inverted(self):
-            inverted = AlbersEqualAreaAxes.InvertedAlbersEqualAreaTransform(self)
+            return AlbersEqualAreaAxes.InvertedAlbersEqualAreaTransform(self)
         inverted.__doc__ = Transform.inverted.__doc__
 
     class InvertedAlbersEqualAreaTransform(Transform):
@@ -660,8 +660,8 @@ class AlbersEqualAreaAxes(SkymapperAxes):
                 theta = np.degrees(np.arctan2(x, inverted.rho_0 - y))
             else:
                 theta = np.degrees(np.arctan2(-x, -(inverted.rho_0 - y)))
-            return np.array([inverted.ra_0 - theta/inverted.n,
-                np.arcsin((inverted.C - (rho * inverted.n)**2)/(2*inverted.n)) / inverted.deg2rad]).T
+            return np.degrees([inverted.ra0 - theta/inverted.n,
+                np.arcsin((inverted.C - (rho * inverted.n)**2)/(2*inverted.n))]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
 
