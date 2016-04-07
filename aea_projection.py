@@ -159,14 +159,19 @@ class SkymapperAxes(Axes):
         self._xaxis_transform = \
             self._xaxis_pretransform + \
             self.transData
+
+        # modify this transformation to move x labels.
+        self._xaxis_text_shift = \
+            Affine2D().translate(0, 0)
+
         self._xaxis_text1_transform = \
-            Affine2D().scale(1.0, 1.0) + \
+            self._xaxis_text_shift + \
             self.transData + \
             Affine2D().translate(0.0, -0.0)
         self._xaxis_text2_transform = \
-            Affine2D().scale(1.0, 1.0) + \
+            self._xaxis_text_shift + \
             self.transData + \
-            Affine2D().translate(0.0, 0.0)
+            Affine2D().translate(0.0, 0)
 
         # Now set up the transforms for the parallel ticks.  The input to
         # these transforms are in axes space in x and display space in
@@ -213,11 +218,16 @@ class SkymapperAxes(Axes):
         self._yaxis_stretch\
             .clear() \
             .scale(self.viewLim.width, 1.0) \
-            .translate(self.viewLim.x0, 0.0)
+            .translate(self.viewLim.x0, 0)
         self._xaxis_pretransform \
             .clear() \
             .scale(1.0, self.viewLim.height) \
             .translate(0.0, self.viewLim.y0)
+
+        # FIXME: allow moving xtick labels to any dec.
+        self._xaxis_text_shift \
+            .clear()  \
+            .translate(0, dec_0)
 
         corners_data = np.array([[self.viewLim.x0, self.viewLim.y0],
                       [ra_0,            self.viewLim.y0],
