@@ -550,7 +550,8 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             while v00 < -180: v00 += 360
             v00 += self.ra_0
             v[:, 0] = v00 + diff
-
+            nonstop = path.codes > 0
+            path = Path(v[nonstop], path.codes[nonstop])
             isteps = path._interpolation_steps * 2
             while True:
                 ipath = path.interpolated(isteps)
@@ -561,7 +562,6 @@ class AlbersEqualAreaAxes(SkymapperAxes):
                 if isteps > 80:
                     break
                 isteps = isteps * 2
-
             return Path(tiv, ipath.codes)
 
         transform_path_non_affine.__doc__ = \
