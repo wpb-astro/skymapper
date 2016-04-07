@@ -380,13 +380,18 @@ class SkymapperAxes(Axes):
 
     def mapshow(self, map, mask=None, nest=False, **kwargs):
         """ Display a healpix map """
-        rasterized = kwargs.get('rasterized', True)
+        vmin = kwargs.pop('vmin', None)
+        vmax = kwargs.pop('vmax', None)
+        defaults = dict(rasterized=True,
+                    alpha=0.8,
+                    linewidth=0)
+        defaults.update(kwargs)
         if mask is None:
             mask = map == map
         v = _boundary(mask, nest)
         coll = PolyCollection(v, array=map[mask], 
-                transform=self.transData, 
-                rasterized=rasterized, **kwargs)
+                transform=self.transData, **defaults)
+        coll.set_clim(vmin=vmin, vmax=vmax)
         self.add_collection(coll)
         return coll
 
