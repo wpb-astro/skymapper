@@ -201,15 +201,23 @@ class SkymapperAxes(Axes):
         if self.ra_0 is None:
             x0, x1 = self.viewLim.intervalx
             ra_0 = 0.5 * (x0 + x1)
+        else:
+            ra_0 = self.ra_0
         if self.dec_0 is None:
             y0, y1 = self.viewLim.intervaly
             dec_0 = 0.5 * (y0 + y1)
+        else:
+            dec_0 = self.dec_0
         if self.dec_1 is None:
             y0, y1 = self.viewLim.intervaly
             dec_1 = y0 + (y1 - y0) / 12.
+        else:
+            dec_1 = self.dec_1
         if self.dec_2 is None:
             y0, y1 = self.viewLim.intervaly
             dec_2 = y1 - (y1 - y0) / 12.
+        else:
+            dec_2 = self.dec_2
 
         self.transProjection.set_center((ra_0, dec_0))
         self.transProjection.set_dec1(dec_1)
@@ -368,7 +376,7 @@ class SkymapperAxes(Axes):
 
     def set_dec0(self, dec0):
         """ Set the center of ra """
-        self.ra_0 = ra0
+        self.dec0 = dec0
         self._update_affine()
 
     # when xlim and ylim are updated, the transformation
