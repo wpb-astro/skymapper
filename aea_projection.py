@@ -389,8 +389,8 @@ class SkymapperAxes(Axes):
         Axes.set_ylim(self, *args, **kwargs)
         self._update_affine()
 
-    def histmap(self, ra, dec, nside=32, weights=None, mean=False, **kwargs):
-        r = histogrammap(ra, dec, nside, weights)
+    def histmap(self, ra, dec, weights=None, nside=32, mean=False, **kwargs):
+        r = histogrammap(ra, dec, weights, nside)
 
         if weights is not None:
             w, N = r
@@ -722,7 +722,7 @@ def _boundary(mask, nest=False):
 
     return vertices
 
-def histogrammap(ra, dec, nside=32, weights=None):
+def histogrammap(ra, dec, weights=None, nside=32):
     import healpy as hp
     ipix = hp.ang2pix(nside, np.radians(90-dec), np.radians(ra), nest=False)
     npix = hp.nside2npix(nside)
