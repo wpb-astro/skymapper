@@ -575,14 +575,15 @@ class AlbersEqualAreaAxes(SkymapperAxes):
         def _update(self):
             self.n = 0.5 * (np.sin(np.radians(self.dec1)) 
                           + np.sin(np.radians(self.dec2)))
-            if self.n == 0:
-                self.n = 0.001
 
             self.C = np.cos(np.radians(self.dec1))**2 + 2 * self.n * np.sin(np.radians(self.dec1))
             self.rho_0 = self.__rho__(self.dec0)
 
         def __rho__(self, dec):
-            return np.sqrt(self.C - 2 * self.n * np.sin(np.radians(dec))) / self.n
+            if self.n == 0:
+                return np.sqrt(self.C - 2 * self.n * np.sin(np.radians(dec)))
+            else:
+                return np.sqrt(self.C - 2 * self.n * np.sin(np.radians(dec))) / self.n
 
         def transform_non_affine(self, ll):
             """
@@ -594,14 +595,20 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             ra = ll[:,0]
             dec = ll[:,1]
             ra0 = self.ra0
-            ra_ = np.radians([ra - ra0]) * -1 # inverse for RA
+            ra_ = np.radians(ra - ra0) * -1 # inverse for RA
 
             # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
-            theta = self.n * ra_[0]
-            rho = self.__rho__(dec)
-            rt = np.array([
-                   rho*np.sin(theta),
-                   self.rho_0 - rho*np.cos(theta)]).T
+            if self.n == 0:
+                rt = np.array([
+                    self.rho_0 * (ra_),
+                    - self.rho_0 * (np.sin(np.radians(self.dec0) - np.sin(np.radians(dec)))),
+                    ]).T
+            else:
+                theta = self.n * ra_
+                rho = self.__rho__(dec)
+                rt = np.array([
+                       rho*np.sin(theta),
+                       self.rho_0 - rho*np.cos(theta)]).T
             if np.isnan(rt).any(): raise ValueError('abc')
             return rt
 
@@ -675,11 +682,18 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             rho = np.sqrt(x**2 + (inverted.rho_0 - y)**2)
 
             # make sure that the signs are correct
-            if inverted.n >= 0:
+            if inverted.n == 0:
+                rt = np.degrees(
+                        [
+                    np.radians(inverted.ra0) - x / inverted.rho_0,
+                    np.arcsin(y / inverted.rho_0 + np.sin(np.radians(inverted.dec0)))
+                        ]).T
+                return rt
+            elif inverted.n > 0:
                 theta = np.degrees(np.arctan2(x, inverted.rho_0 - y))
             else:
                 theta = np.degrees(np.arctan2(-x, -(inverted.rho_0 - y)))
-            return np.degrees([inverted.ra0 - theta/inverted.n,
+            return np.degrees([np.radians(inverted.ra0) - theta/inverted.n,
                 np.arcsin((inverted.C - (rho * inverted.n)**2)/(2*inverted.n))]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
