@@ -8,7 +8,7 @@ from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle, Polygon
 from matplotlib.path import Path
 from matplotlib.collections import PolyCollection
-from matplotlib.ticker import NullLocator, Formatter, FixedLocator
+from matplotlib.ticker import NullLocator, Formatter, FixedLocator, MaxNLocator
 from matplotlib.transforms import Affine2D, BboxTransformTo, Transform, blended_transform_factory
 from matplotlib.projections import register_projection
 import matplotlib.spines as mspines
@@ -66,13 +66,12 @@ class SkymapperAxes(Axes):
         # Don't forget to call the base class
         Axes.cla(self)
 
-        # Set up a default grid spacing
-        self.set_meridian_grid(30)
-        self.set_parallel_grid(15)
-
         # Turn off minor ticking altogether
         self.xaxis.set_minor_locator(NullLocator())
         self.yaxis.set_minor_locator(NullLocator())
+
+        self.xaxis.set_major_locator(MaxNLocator(5, prune='both'))
+        self.yaxis.set_major_locator(MaxNLocator(5, prune='both'))
 
         # Do not display ticks -- we only want gridlines and text
         self.xaxis.set_ticks_position('none')
