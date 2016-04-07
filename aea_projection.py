@@ -45,7 +45,6 @@ class SkymapperAxes(Axes):
         self.dec_0 = kwargs.pop('dec_0', 0)
         self.dec_1 = kwargs.pop('dec_1', 0)
         self.dec_2 = kwargs.pop('dec_2', 60)
-        self.ra_0 = kwargs.pop('ra_0', 0)
 
         Axes.__init__(self, *args, **kwargs)
 
@@ -78,6 +77,7 @@ class SkymapperAxes(Axes):
         self.xaxis.set_ticks_position('none')
         self.yaxis.set_ticks_position('none')
 
+        self.set_ra0(None)
         self.set_xlim(0, 360)
         self.set_ylim(-90, 90)
         self.set_autoscale_on(False)
@@ -110,7 +110,7 @@ class SkymapperAxes(Axes):
 
         # 1) The core transformation from data space into
         # rectilinear space defined in the HammerTransform class.
-        self.transProjection = self.get_projection_class()(ra_0=self.ra_0,
+        self.transProjection = self.get_projection_class()(ra_0=180,
                         dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
 
         # 2) The above has an output range that is not in the unit
@@ -333,6 +333,16 @@ class SkymapperAxes(Axes):
             raise NotImplementedError
         Axes.set_yscale(self, *args, **kwargs)
 
+    def set_ra0(self, ra0):
+        """ Set the center of ra """
+        if ra0 is None:
+            x0, x1 = self.viewLim.intervalx
+            self.transProjection.ra_0 = 0.5 * (x0 + x1)
+        else:
+            self.transProjection.ra_0 = ra0
+        self.ra_0 = ra0
+        self._update_affine()
+
     # when xlim and ylim are updated, the transformation
     # needs to be updated too.
     def set_xlim(self, *args, **kwargs):
@@ -340,9 +350,12 @@ class SkymapperAxes(Axes):
 
         # FIXME: wrap x0 x1 to ensure they enclose ra0.
         x0, x1 = self.viewLim.intervalx
-        if not x0 <= self.transProjection.ra_0 or \
-           not x1 > self.transProjection.ra_0:
-            raise ValueError("The given limit in RA does not enclose ra_0")
+        if self.ra_0 is not None:
+            if not x0 <= self.transProjection.ra_0 or \
+               not x1 > self.transProjection.ra_0:
+                raise ValueError("The given limit in RA does not enclose ra_0")
+        else:
+            self.transProjection.ra_0 = 0.5 * (x0 + x1)
 
         self._update_affine()
 
@@ -365,10 +378,15 @@ class SkymapperAxes(Axes):
 
         return w, mask, self.mapshow(w, mask, nest=False, **kwargs)
 
-    def mapshow(self, map, mask, nest=False, **kwargs):
+    def mapshow(self, map, mask=None, nest=False, **kwargs):
         """ Display a healpix map """
+        rasterized = kwargs.get('rasterized', True)
+        if mask is None:
+            mask = map == map
         v = _boundary(mask, nest)
-        coll = PolyCollection(v, array=map[mask], transform=self.transData, **kwargs)
+        coll = PolyCollection(v, array=map[mask], 
+                transform=self.transData, 
+                rasterized=rasterized, **kwargs)
         self.add_collection(coll)
         return coll
 
@@ -559,7 +577,7 @@ class AlbersEqualAreaAxes(SkymapperAxes):
                 itv = Path(self.transform(path.vertices)).interpolated(isteps).vertices
                 if np.mean(np.abs(tiv - itv)) < 0.01:
                     break
-                if isteps > 80:
+                if isteps > 20:
                     break
                 isteps = isteps * 2
             return Path(tiv, ipath.codes)
