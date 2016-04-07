@@ -156,6 +156,7 @@ class SkymapperAxes(Axes):
             Affine2D() \
             .scale(1.0, 180) \
             .translate(0.0, -90)
+
         self._xaxis_transform = \
             self._xaxis_pretransform + \
             self.transData
@@ -167,11 +168,11 @@ class SkymapperAxes(Axes):
         self._xaxis_text1_transform = \
             self._xaxis_text_shift + \
             self.transData + \
-            Affine2D().translate(0.0, -0.0)
+            Affine2D().translate(0.0, -8.0)
         self._xaxis_text2_transform = \
             self._xaxis_text_shift + \
             self.transData + \
-            Affine2D().translate(0.0, 0)
+            Affine2D().translate(0.0, -8.0)
 
         # Now set up the transforms for the parallel ticks.  The input to
         # these transforms are in axes space in x and display space in
@@ -225,9 +226,10 @@ class SkymapperAxes(Axes):
             .translate(0.0, self.viewLim.y0)
 
         # FIXME: allow moving xtick labels to any dec.
+        y0, y1 = self.viewLim.intervaly
         self._xaxis_text_shift \
             .clear()  \
-            .translate(0, dec_0)
+            .translate(0, y0)
 
         corners_data = np.array([[self.viewLim.x0, self.viewLim.y0],
                       [ra_0,            self.viewLim.y0],
@@ -274,7 +276,7 @@ class SkymapperAxes(Axes):
 
         Returns a tuple of the form (transform, valign, halign)
         """
-        return self._xaxis_text1_transform, 'bottom', 'center'
+        return self._xaxis_text1_transform, 'top', 'center'
 
     def get_xaxis_text2_transform(self, pixelPad):
         """
@@ -283,7 +285,7 @@ class SkymapperAxes(Axes):
 
         Returns a tuple of the form (transform, valign, halign)
         """
-        return self._xaxis_text2_transform, 'top', 'center'
+        return self._xaxis_text2_transform, 'bottom', 'center'
 
     def get_yaxis_transform(self, which='grid'):
         """
