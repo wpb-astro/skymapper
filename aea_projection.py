@@ -509,7 +509,7 @@ class SkymapperAxes(Axes):
         """
         Return True if this axes support the zoom box
         """
-        return False
+        return True
 
     def start_pan(self, x, y, button):
         self._pan_trans = self.transAxes.inverted() + \
@@ -522,8 +522,8 @@ class SkymapperAxes(Axes):
 
     def drag_pan(self, button, key, x, y):
         pan1 = self._pan_trans.transform([(x, y)])[0]
-        self.transProjection.ra_0 = 360 - pan1[0]
-        self.transProjection.dec_0 = pan1[1]
+        self.set_ra0(360 - pan1[0])
+        self.set_dec0(pan1[1])
         self._update_affine()
 
 # now define the Albers equal area axes
