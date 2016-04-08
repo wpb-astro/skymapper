@@ -77,7 +77,7 @@ class SkymapperAxes(Axes):
         self.xaxis.set_ticks_position('none')
         self.yaxis.set_ticks_position('none')
 
-        self.set_ra0(None)
+        self.set_center(None, None)
         self.set_xlim(0, 360)
         self.set_ylim(-90, 90)
         self.set_autoscale_on(False)
@@ -369,14 +369,16 @@ class SkymapperAxes(Axes):
             raise NotImplementedError
         Axes.set_yscale(self, *args, **kwargs)
 
-    def set_ra0(self, ra0):
+    def set_center(self, ra0, dec0):
         """ Set the center of ra """
         self.ra_0 = ra0
+        self.dec_0 = dec0
         self._update_affine()
 
-    def set_dec0(self, dec0):
-        """ Set the center of ra """
-        self.dec0 = dec0
+    def set_parallels(self, dec1, dec2):
+        """ Set the parallels """
+        self.dec_1 = dec1
+        self.dec_2 = dec2
         self._update_affine()
 
     # when xlim and ylim are updated, the transformation
@@ -776,6 +778,8 @@ if __name__ == '__main__':
     ax.set_parallel_grid(30)
     ax.set_xlim(0, 360)
     ax.set_ylim(-70, 70)
+    ax.set_parallels(-20, 60)
+    ax.set_center(180, 0)
     ax.plot(ra, dec, '.')
     ax.grid()
     plt.savefig('xxx.png')
