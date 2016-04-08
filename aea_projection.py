@@ -8,7 +8,7 @@ from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle, Polygon
 from matplotlib.path import Path
 from matplotlib.collections import PolyCollection
-from matplotlib.ticker import NullLocator, Formatter, FixedLocator
+from matplotlib.ticker import NullLocator, Formatter, FixedLocator, MaxNLocator
 from matplotlib.transforms import Affine2D, BboxTransformTo, Transform, blended_transform_factory
 from matplotlib.projections import register_projection
 import matplotlib.spines as mspines
@@ -42,10 +42,10 @@ class SkymapperAxes(Axes):
         raise NotImplementedError('Must implement this in subclass')
 
     def __init__(self, *args, **kwargs):
-        self.dec_0 = kwargs.pop('dec_0', 0)
-        self.dec_1 = kwargs.pop('dec_1', 0)
-        self.dec_2 = kwargs.pop('dec_2', 60)
-        self.ra_0 = kwargs.pop('ra_0', 0)
+        self.ra_0 = None
+        self.dec_0 = None
+        self.dec_1 = None
+        self.dec_2 = None
 
         Axes.__init__(self, *args, **kwargs)
 
@@ -66,18 +66,18 @@ class SkymapperAxes(Axes):
         # Don't forget to call the base class
         Axes.cla(self)
 
-        # Set up a default grid spacing
-        self.set_meridian_grid(30)
-        self.set_parallel_grid(15)
-
         # Turn off minor ticking altogether
         self.xaxis.set_minor_locator(NullLocator())
         self.yaxis.set_minor_locator(NullLocator())
+
+        self.xaxis.set_major_locator(MaxNLocator(5, prune='both'))
+        self.yaxis.set_major_locator(MaxNLocator(5, prune='both'))
 
         # Do not display ticks -- we only want gridlines and text
         self.xaxis.set_ticks_position('none')
         self.yaxis.set_ticks_position('none')
 
+        self.set_ra0(None)
         self.set_xlim(0, 360)
         self.set_ylim(-90, 90)
         self.set_autoscale_on(False)
@@ -110,8 +110,10 @@ class SkymapperAxes(Axes):
 
         # 1) The core transformation from data space into
         # rectilinear space defined in the HammerTransform class.
-        self.transProjection = self.get_projection_class()(ra_0=self.ra_0,
-                        dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
+        self.transProjection = self.get_projection_class()()
+        self.transProjection.set_center((180, 0))
+        self.transProjection.set_dec1(-65)
+        self.transProjection.set_dec2(80)
 
         # 2) The above has an output range that is not in the unit
         # rectangle, so scale and translate it so it fits correctly
@@ -153,17 +155,23 @@ class SkymapperAxes(Axes):
             Affine2D() \
             .scale(1.0, 180) \
             .translate(0.0, -90)
+
         self._xaxis_transform = \
             self._xaxis_pretransform + \
             self.transData
+
+        # modify this transformation to move x labels.
+        self._xaxis_text_shift = \
+            Affine2D().translate(0, 0)
+
         self._xaxis_text1_transform = \
-            Affine2D().scale(1.0, 1.0) + \
+            self._xaxis_text_shift + \
             self.transData + \
-            Affine2D().translate(0.0, -0.0)
+            Affine2D().translate(0.0, -8.0)
         self._xaxis_text2_transform = \
-            Affine2D().scale(1.0, 1.0) + \
+            self._xaxis_text_shift + \
             self.transData + \
-            Affine2D().translate(0.0, 0.0)
+            Affine2D().translate(0.0, -8.0)
 
         # Now set up the transforms for the parallel ticks.  The input to
         # these transforms are in axes space in x and display space in
@@ -190,17 +198,45 @@ class SkymapperAxes(Axes):
     def _update_affine(self):
         # update the transformations and clip paths
         # after new lims are set.
+        if self.ra_0 is None:
+            x0, x1 = self.viewLim.intervalx
+            ra_0 = 0.5 * (x0 + x1)
+        else:
+            ra_0 = self.ra_0
+        if self.dec_0 is None:
+            y0, y1 = self.viewLim.intervaly
+            dec_0 = 0.5 * (y0 + y1)
+        else:
+            dec_0 = self.dec_0
+        if self.dec_1 is None:
+            y0, y1 = self.viewLim.intervaly
+            dec_1 = y0 + (y1 - y0) / 12.
+        else:
+            dec_1 = self.dec_1
+        if self.dec_2 is None:
+            y0, y1 = self.viewLim.intervaly
+            dec_2 = y1 - (y1 - y0) / 12.
+        else:
+            dec_2 = self.dec_2
+
+        self.transProjection.set_center((ra_0, dec_0))
+        self.transProjection.set_dec1(dec_1)
+        self.transProjection.set_dec2(dec_2)
+
         self._yaxis_stretch\
             .clear() \
             .scale(self.viewLim.width, 1.0) \
-            .translate(self.viewLim.x0, 0.0)
+            .translate(self.viewLim.x0, 0)
         self._xaxis_pretransform \
             .clear() \
             .scale(1.0, self.viewLim.height) \
             .translate(0.0, self.viewLim.y0)
 
-        ra_0 = self.transProjection.ra_0
-
+        # FIXME: allow moving xtick labels to any dec.
+        y0, y1 = self.viewLim.intervaly
+        self._xaxis_text_shift \
+            .clear()  \
+            .translate(0, y0)
 
         corners_data = np.array([[self.viewLim.x0, self.viewLim.y0],
                       [ra_0,            self.viewLim.y0],
@@ -247,7 +283,7 @@ class SkymapperAxes(Axes):
 
         Returns a tuple of the form (transform, valign, halign)
         """
-        return self._xaxis_text1_transform, 'bottom', 'center'
+        return self._xaxis_text1_transform, 'top', 'center'
 
     def get_xaxis_text2_transform(self, pixelPad):
         """
@@ -256,7 +292,7 @@ class SkymapperAxes(Axes):
 
         Returns a tuple of the form (transform, valign, halign)
         """
-        return self._xaxis_text2_transform, 'top', 'center'
+        return self._xaxis_text2_transform, 'bottom', 'center'
 
     def get_yaxis_transform(self, which='grid'):
         """
@@ -333,6 +369,16 @@ class SkymapperAxes(Axes):
             raise NotImplementedError
         Axes.set_yscale(self, *args, **kwargs)
 
+    def set_ra0(self, ra0):
+        """ Set the center of ra """
+        self.ra_0 = ra0
+        self._update_affine()
+
+    def set_dec0(self, dec0):
+        """ Set the center of ra """
+        self.dec0 = dec0
+        self._update_affine()
+
     # when xlim and ylim are updated, the transformation
     # needs to be updated too.
     def set_xlim(self, *args, **kwargs):
@@ -340,9 +386,10 @@ class SkymapperAxes(Axes):
 
         # FIXME: wrap x0 x1 to ensure they enclose ra0.
         x0, x1 = self.viewLim.intervalx
-        if not x0 <= self.transProjection.ra_0 or \
-           not x1 > self.transProjection.ra_0:
-            raise ValueError("The given limit in RA does not enclose ra_0")
+        if self.ra_0 is not None:
+            if not x0 <= self.transProjection.ra_0 or \
+               not x1 > self.transProjection.ra_0:
+                raise ValueError("The given limit in RA does not enclose ra_0")
 
         self._update_affine()
 
@@ -350,8 +397,8 @@ class SkymapperAxes(Axes):
         Axes.set_ylim(self, *args, **kwargs)
         self._update_affine()
 
-    def histmap(self, ra, dec, nside=32, weights=None, mean=False, **kwargs):
-        r = histogrammap(ra, dec, nside, weights)
+    def histmap(self, ra, dec, weights=None, nside=32, mean=False, **kwargs):
+        r = histogrammap(ra, dec, weights, nside)
 
         if weights is not None:
             w, N = r
@@ -365,10 +412,20 @@ class SkymapperAxes(Axes):
 
         return w, mask, self.mapshow(w, mask, nest=False, **kwargs)
 
-    def mapshow(self, map, mask, nest=False, **kwargs):
+    def mapshow(self, map, mask=None, nest=False, **kwargs):
         """ Display a healpix map """
+        vmin = kwargs.pop('vmin', None)
+        vmax = kwargs.pop('vmax', None)
+        defaults = dict(rasterized=True,
+                    alpha=0.8,
+                    linewidth=0)
+        defaults.update(kwargs)
+        if mask is None:
+            mask = map == map
         v = _boundary(mask, nest)
-        coll = PolyCollection(v, array=map[mask], transform=self.transData, **kwargs)
+        coll = PolyCollection(v, array=map[mask], 
+                transform=self.transData, **defaults)
+        coll.set_clim(vmin=vmin, vmax=vmax)
         self.add_collection(coll)
         return coll
 
@@ -452,7 +509,7 @@ class SkymapperAxes(Axes):
         """
         Return True if this axes support the zoom box
         """
-        return False
+        return True
 
     def start_pan(self, x, y, button):
         self._pan_trans = self.transAxes.inverted() + \
@@ -465,8 +522,8 @@ class SkymapperAxes(Axes):
 
     def drag_pan(self, button, key, x, y):
         pan1 = self._pan_trans.transform([(x, y)])[0]
-        self.transProjection.ra_0 = 360 - pan1[0]
-        self.transProjection.dec_0 = pan1[1]
+        self.set_ra0(360 - pan1[0])
+        self.set_dec0(pan1[1])
         self._update_affine()
 
 # now define the Albers equal area axes
@@ -493,21 +550,40 @@ class AlbersEqualAreaAxes(SkymapperAxes):
         output_dims = 2
         is_separable = False
 
-        def __init__(self, ra_0=0, dec_0=0, dec_1=0, dec_2=60, **kwargs):
+        def __init__(self, **kwargs):
             Transform.__init__(self, **kwargs)
-            self.dec_0 = dec_0
-            self.dec_1 = dec_1
-            self.dec_2 = dec_2
+            self.dec0 = 0
+            self.ra0 = 180
+            self.dec1 = -60
+            self.dec2 = 30
+            self._update()
 
-            self.ra_0 = ra_0
-            self.deg2rad = np.pi/180
+        def set_center(self, center):
+            ra0, dec0 = center
+            self.ra0  = ra0
+            self.dec0 = dec0
+            self._update()
 
-            self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
-            self.C = np.cos(dec_1 * self.deg2rad)**2 + 2 * self.n * np.sin(dec_1 * self.deg2rad)
-            self.rho_0 = self.__rho__(dec_0)
+        def set_dec1(self, dec1):
+            self.dec1 = dec1
+            self._update()
+
+        def set_dec2(self, dec2):
+            self.dec2 = dec2
+            self._update()
+
+        def _update(self):
+            self.n = 0.5 * (np.sin(np.radians(self.dec1)) 
+                          + np.sin(np.radians(self.dec2)))
+
+            self.C = np.cos(np.radians(self.dec1))**2 + 2 * self.n * np.sin(np.radians(self.dec1))
+            self.rho_0 = self.__rho__(self.dec0)
 
         def __rho__(self, dec):
-            return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
+            if self.n == 0:
+                return np.sqrt(self.C - 2 * self.n * np.sin(np.radians(dec)))
+            else:
+                return np.sqrt(self.C - 2 * self.n * np.sin(np.radians(dec))) / self.n
 
         def transform_non_affine(self, ll):
             """
@@ -518,15 +594,21 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             """
             ra = ll[:,0]
             dec = ll[:,1]
-
-            ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
+            ra0 = self.ra0
+            ra_ = np.radians(ra - ra0) * -1 # inverse for RA
 
             # FIXME: problem with the slices sphere: outer parallel needs to be dubplicated at the expense of the central one
-            theta = self.n * ra_[0]
-            rho = self.__rho__(dec)
-            rt = np.array([
-                rho*np.sin(theta * self.deg2rad),
-                 self.rho_0 - rho*np.cos(theta * self.deg2rad)]).T
+            if self.n == 0:
+                rt = np.array([
+                    self.rho_0 * (ra_),
+                    - self.rho_0 * (np.sin(np.radians(self.dec0) - np.sin(np.radians(dec)))),
+                    ]).T
+            else:
+                theta = self.n * ra_
+                rho = self.__rho__(dec)
+                rt = np.array([
+                       rho*np.sin(theta),
+                       self.rho_0 - rho*np.cos(theta)]).T
             if np.isnan(rt).any(): raise ValueError('abc')
             return rt
 
@@ -542,15 +624,17 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             # we keep adding control points, till all control points
             # have an error of less than 0.01 (about 1%)
             # or if the number of control points is > 80.
+            ra0 = self.ra0
             path = path.cleaned(curves=False)
             v = path.vertices
             diff = v[:, 0] - v[0, 0]
-            v00 = v[0][0] - self.ra_0
+            v00 = v[0][0] - ra0
             while v00 > 180: v00 -= 360
             while v00 < -180: v00 += 360
-            v00 += self.ra_0
+            v00 += ra0
             v[:, 0] = v00 + diff
-
+            nonstop = path.codes > 0
+            path = Path(v[nonstop], path.codes[nonstop])
             isteps = path._interpolation_steps * 2
             while True:
                 ipath = path.interpolated(isteps)
@@ -558,10 +642,9 @@ class AlbersEqualAreaAxes(SkymapperAxes):
                 itv = Path(self.transform(path.vertices)).interpolated(isteps).vertices
                 if np.mean(np.abs(tiv - itv)) < 0.01:
                     break
-                if isteps > 80:
+                if isteps > 20:
                     break
                 isteps = isteps * 2
-
             return Path(tiv, ipath.codes)
 
         transform_path_non_affine.__doc__ = \
@@ -573,8 +656,7 @@ class AlbersEqualAreaAxes(SkymapperAxes):
             transform_path.__doc__ = Transform.transform_path.__doc__
 
         def inverted(self):
-            return AlbersEqualAreaAxes.InvertedAlbersEqualAreaTransform(
-                        ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
+            return AlbersEqualAreaAxes.InvertedAlbersEqualAreaTransform(self)
         inverted.__doc__ = Transform.inverted.__doc__
 
     class InvertedAlbersEqualAreaTransform(Transform):
@@ -588,33 +670,31 @@ class AlbersEqualAreaAxes(SkymapperAxes):
         output_dims = 2
         is_separable = False
 
-        def __init__(self, ra_0=0, dec_0=0, dec_1=-30, dec_2=30, **kwargs):
+        def __init__(self, inverted, **kwargs):
             Transform.__init__(self, **kwargs)
-            self.dec_0 = dec_0
-            self.dec_1 = dec_1
-            self.ra_0 = ra_0
-            self.deg2rad = np.pi/180
-
-            self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
-            self.C = np.cos(dec_1 * self.deg2rad)**2 + 2 * self.n * np.sin(dec_1 * self.deg2rad)
-            self.rho_0 = self.__rho__(dec_0)
-
-        def __rho__(self, dec):
-            return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
+            self.inverted = inverted
 
         def transform_non_affine(self, xy):
             x = xy[:,0]
             y = xy[:,1]
+            inverted = self.inverted
 
-            rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
+            rho = np.sqrt(x**2 + (inverted.rho_0 - y)**2)
 
             # make sure that the signs are correct
-            if self.n >= 0:
-                theta = np.arctan2(x, self.rho_0 - y) / self.deg2rad
+            if inverted.n == 0:
+                rt = np.degrees(
+                        [
+                    np.radians(inverted.ra0) - x / inverted.rho_0,
+                    np.arcsin(y / inverted.rho_0 + np.sin(np.radians(inverted.dec0)))
+                        ]).T
+                return rt
+            elif inverted.n > 0:
+                theta = np.degrees(np.arctan2(x, inverted.rho_0 - y))
             else:
-                theta = np.arctan2(-x, -(self.rho_0 - y)) / self.deg2rad
-            return np.array([self.ra_0 - theta/self.n,
-                np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad]).T
+                theta = np.degrees(np.arctan2(-x, -(inverted.rho_0 - y)))
+            return np.degrees([np.radians(inverted.ra0) - theta/inverted.n,
+                np.arcsin((inverted.C - (rho * inverted.n)**2)/(2*inverted.n))]).T
 
             transform_non_affine.__doc__ = Transform.transform_non_affine.__doc__
 
@@ -623,7 +703,8 @@ class AlbersEqualAreaAxes(SkymapperAxes):
 
         def inverted(self):
             # The inverse of the inverse is the original transform... ;)
-            return AlbersEqualAreaAxes.AlbersEqualAreaTransform(ra_0=self.ra_0, dec_0=self.dec_0, dec_1=self.dec_1, dec_2=self.dec_2)
+            return self.inverted
+
         inverted.__doc__ = Transform.inverted.__doc__
 
 # a few helper functions talking to healpy/healpix.
@@ -663,7 +744,7 @@ def _boundary(mask, nest=False):
 
     return vertices
 
-def histogrammap(ra, dec, nside=32, weights=None):
+def histogrammap(ra, dec, weights=None, nside=32):
     import healpy as hp
     ipix = hp.ang2pix(nside, np.radians(90-dec), np.radians(ra), nest=False)
     npix = hp.nside2npix(nside)
@@ -690,11 +771,11 @@ if __name__ == '__main__':
     ra = np.random.uniform(size=10000, low=0, high=360)
     dec = np.random.uniform(size=10000, low=-90, high=90)
 
-    ax = fig.add_subplot(111, aspect='equal', projection="aea", dec_1=-20., dec_2=30., ra_0=180, dec_0=0.)
+    ax = fig.add_subplot(111, aspect='equal', projection="aea")
     ax.set_meridian_grid(30)
     ax.set_parallel_grid(30)
-    #ax.set_xlim(0, 360)
-    #ax.set_ylim(-70, 70)
+    ax.set_xlim(0, 360)
+    ax.set_ylim(-70, 70)
     ax.plot(ra, dec, '.')
     ax.grid()
     plt.savefig('xxx.png')
