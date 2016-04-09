@@ -260,11 +260,13 @@ class SkymapperAxes(Axes):
         yscale = np.abs(y_0 - y_1)
 
         self.transAffine.clear() \
+            .translate( - x_0 + xscale * 0.5, - y_1 + yscale * 0.5) \
             .scale(0.95 / xscale, 0.95 / yscale)  \
             .translate(0.5, 0.5)
 
         # now update the clipping path
         path = Path(corners_data)
+        path0 = self.transProjection.transform_path(path)
         path = self.transClip.transform_path(path)
         self.patch.set_xy(path.vertices)
 
@@ -713,8 +715,6 @@ class AlbersEqualAreaAxes(SkymapperAxes):
 def _boundary(mask, nest=False):
     """Generate healpix vertices for pixels where mask is True
 
-    Requires: healpy
-
     Args:
         pix: list of pixel numbers
         nest: nested or not
@@ -724,32 +724,27 @@ def _boundary(mask, nest=False):
         vertices
         vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
     """
-    import healpy as hp
 
     pix = mask.nonzero()[0]
+    import healpy as hp
     nside = hp.npix2nside(len(mask))
-    # get the vertices that confine each pixel
-    # convert to RA/Dec (thanks to Eric Huff)
+
     vertices = np.zeros((pix.size, 4, 2))
-    for i in xrange(pix.size):
-        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pix[i],nest=nest)))
-        corners = np.degrees(corners)
-
-        # ensure no patch wraps around.
-        diff = corners[1] - corners[1][0]
-        diff[diff > 180] -= 360
-        diff[diff < -180] += 360
-        corners[1] = corners[1][0] + diff
-
-        vertices[i,:,0] = corners[1]
-        vertices[i,:,1] = 90.0 - corners[0]
+    theta, phi = boundaries(nside, pix)
+    theta = np.degrees(theta)
+    phi = np.degrees(phi)
+    diff = phi - phi[:, 0][:, None]
+    diff[diff > 180] -= 360
+    diff[diff < -180] += 360
+    phi = phi[:, 0][:, None] + diff
+    vertices[:,:,0] = phi
+    vertices[:,:,1] = 90.0 - theta
 
     return vertices
 
 def histogrammap(ra, dec, weights=None, nside=32):
-    import healpy as hp
-    ipix = hp.ang2pix(nside, np.radians(90-dec), np.radians(ra), nest=False)
-    npix = hp.nside2npix(nside)
+    ipix = ang2pix(nside, np.radians(90-dec), np.radians(ra))
+    npix = nside * nside * 12
     if weights is not None:
         w = np.bincount(ipix, weights=weights, minlength=npix)
         N = np.bincount(ipix, minlength=npix)
@@ -761,7 +756,162 @@ def histogrammap(ra, dec, weights=None, nside=32):
 # Now register the projection with matplotlib so the user can select
 # it.
 register_projection(AlbersEqualAreaAxes)
+import numpy
 
+def ang2pix(nside, theta, phi):
+    nside, theta, phi = numpy.lib.stride_tricks.broadcast_arrays(nside, theta, phi)
+    
+    def equatorial(nside, tt, z):
+        t1 = nside * (0.5 + tt)
+        t2 = nside * z * 0.75
+        jp = (t1 - t2).astype('i8')
+        jm = (t1 + t2).astype('i8')
+        ir = nside + 1 + jp - jm # in {1, 2n + 1}
+        kshift = 1 - (ir & 1) # kshift=1 if ir even, 0 odd 
+ 
+        ip = (jp + jm - nside + kshift + 1) // 2 # in {0, 4n - 1}
+        
+        ip = ip % (4 * nside)
+        return nside * (nside - 1) * 2 + (ir - 1) * 4 * nside + ip
+        
+    def polecaps(nside, tt, z, s):
+        tp = tt - numpy.floor(tt)
+        za = numpy.abs(z)
+        tmp = nside * s / ((1 + za) / 3) ** 0.5
+        mp = za > 0.99
+        tmp[mp] = nside[mp] * (3 *(1-za[mp])) ** 0.5
+        jp = (tp * tmp).astype('i8')
+        jm = ((1 - tp) * tmp).astype('i8')
+        ir = jp + jm + 1
+        ip = (tt * ir).astype('i8')
+        ip = ip % (4 * ir)
+
+        r1 = 2 * ir * (ir - 1) 
+        r2 = 2 * ir * (ir + 1)
+ 
+        r = numpy.empty_like(r1)
+        
+        r[z > 0] = r1[z > 0] + ip[z > 0]
+        r[z < 0] = 12 * nside[z < 0] * nside[z < 0] - r2[z < 0] + ip[z < 0]
+        return r
+    
+    z = numpy.cos(theta)
+    s = numpy.sin(theta)
+    
+    tt = (phi / (0.5 * numpy.pi) ) % 4 # in [0, 4]
+    
+    result = numpy.zeros(z.shape, dtype='i8')
+    mask = (z < 2. / 3) & (z > -2. / 3)
+  
+    result[mask] = equatorial(nside[mask], tt[mask], z[mask])
+    result[~mask] = polecaps(nside[~mask], tt[~mask], z[~mask], s[~mask])
+    return result
+    
+def pix2ang(nside, pix):
+    nside, pix = numpy.lib.stride_tricks.broadcast_arrays(nside, pix)
+    
+    ncap = nside * (nside - 1) * 2
+    npix = 12 * nside * nside
+    
+    def northpole(pix, npix):
+        iring = (1 + ((1 + 2 * pix) ** 0.5)).astype('int64') // 2
+        iphi = (pix + 1) - 2 * iring * (iring - 1)
+        z = 1.0 - (iring*iring) * 4. / npix
+        phi = (iphi - 0.5) * 0.5 * numpy.pi / iring
+        return z, phi
+    
+    def equatorial(pix, nside, npix, ncap):
+        ip = pix - ncap
+        iring = ip // (4 * nside) + nside
+        iphi = ip % (4 * nside) + 1
+        fodd = (((iring + nside) &1) + 1.) * 0.5
+        z = (2 * nside - iring) * nside * 8.0 / npix
+        phi = (iphi - fodd) * (0.5 * numpy.pi) / nside
+        return z, phi
+    
+    def southpole(pix, npix):
+        ip = npix - pix
+        iring = (1 + ((2 * ip - 1)**0.5).astype('int64')) // 2
+        iphi = 4 * iring + 1 - (ip - 2 * iring * (iring - 1))
+        z = -1 + (iring * iring) * 4. / npix
+        phi = (iphi - 0.5 ) * 0.5 * numpy.pi / iring
+        return z, phi
+    
+    mask1 = pix < ncap
+    
+    mask2 = (~mask1) & (pix < npix - ncap)
+    mask3 = pix >= npix - ncap
+
+    z = numpy.zeros(pix.shape, dtype='f8')
+    phi = numpy.zeros(pix.shape, dtype='f8')
+    z[mask1], phi[mask1] = northpole(pix[mask1], npix[mask1])
+    z[mask2], phi[mask2] = equatorial(pix[mask2], nside[mask2], npix[mask2], ncap[mask2])
+    z[mask3], phi[mask3] = southpole(pix[mask3], npix[mask3])
+    return numpy.arccos(z), phi
+
+def ang2xy(theta, phi):
+    theta, phi = numpy.lib.stride_tricks.broadcast_arrays(theta, phi)
+    z = numpy.cos(theta)
+    x = numpy.empty(theta.shape, dtype='f8')
+    y = numpy.empty(theta.shape, dtype='f8')
+    def sigma(z):
+        return numpy.sign(z) * (2 - (3 * (1- numpy.abs(z))) ** 0.5)
+            
+    def equatorial(z, phi):
+        return phi, 3 * numpy.pi / 8 * z
+    def polarcaps(z, phi):
+        s = sigma(z)
+        x = phi - (numpy.abs(s) - 1) * (phi % (0.5 * numpy.pi) - 0.25 * numpy.pi)
+        y = 0.25 * numpy.pi * s
+        return x, y
+    
+    mask = numpy.abs(z) < 2. / 3
+
+    x[mask], y[mask] = equatorial(z[mask], phi[mask])
+    x[~mask], y[~mask] = polarcaps(z[~mask], phi[~mask])
+    return x, y
+
+def xy2ang(x, y):
+    x, y = numpy.lib.stride_tricks.broadcast_arrays(x, y)
+    
+    theta = numpy.empty(x.shape, dtype='f8')
+    phi = numpy.empty(x.shape, dtype='f8')
+    
+    def equatorial(x, y):
+        return numpy.arccos(8 * y / (3 * numpy.pi)), x
+    
+    def polarcaps(x, y):
+        ya = numpy.abs(y)
+        xt = x % (0.5 * numpy.pi)
+        phi = x - (ya - numpy.pi * 0.25) / (ya - numpy.pi * 0.5) * (xt - 0.25 * numpy.pi)
+        z = (1 - 1. / 3 * (2 - 4 * ya / numpy.pi)**2) * y / ya
+        return numpy.arccos(z), phi
+    
+    mask = numpy.abs(y) < numpy.pi * 0.25
+   
+    theta[mask], phi[mask] = equatorial(x[mask], y[mask])
+    theta[~mask], phi[~mask] = polarcaps(x[~mask], y[~mask])
+    return theta, phi
+
+def boundaries(nside, pix):
+    nside, pix = numpy.lib.stride_tricks.broadcast_arrays(nside, pix)
+    x = numpy.zeros(nside.shape, dtype=('f8', 4))
+    y = numpy.zeros(nside.shape, dtype=('f8', 4))
+    theta, phi = pix2ang(nside, pix)
+    xc, yc = ang2xy(theta, phi)
+    xstep = numpy.pi / (2 * nside)
+    ystep = numpy.pi / (2 * nside)
+    x[..., 0] = xc - 0.5 * xstep
+    y[..., 0] = yc
+    x[..., 1] = xc
+    y[..., 1] = yc + 0.5 * ystep
+    x[..., 2] = xc + 0.5 * xstep
+    y[..., 2] = yc
+    x[..., 3] = xc
+    y[..., 3] = yc - 0.5 * ystep
+    
+    theta, phi = xy2ang(x, y)
+    return theta, phi
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     # Now make a simple example using the custom projection.
@@ -773,7 +923,7 @@ if __name__ == '__main__':
     ra = np.random.uniform(size=10000, low=0, high=360)
     dec = np.random.uniform(size=10000, low=-90, high=90)
 
-    ax = fig.add_subplot(111, aspect='equal', projection="aea")
+    ax = fig.add_subplot(111, projection="aea")
     ax.set_meridian_grid(30)
     ax.set_parallel_grid(30)
     ax.set_xlim(0, 360)
