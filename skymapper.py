@@ -597,7 +597,7 @@ def setupConicAxes(ax, ra, dec, proj, pad=0.02, bgcolor='#aaaaaa'):
         bgcolor: matplotlib color to be used for ax
 
     Returns:
-        AlbersEqualAreaProjection or aea
+        None
     """
     if bgcolor is not None:
         ax.set_axis_bgcolor(bgcolor)
@@ -639,6 +639,25 @@ def cloneMap(ax0, ax):
     ax.set_ylim(ax0.get_ylim())
 
 def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
+    """Create conic projection and set up axes.
+
+    This function constructs a conic projection to optimally hold the
+    ra/dec, see getOptimalConicProjection(),
+    and  preconfigures the matplotlib axes and sets the proper x/y
+    limits to show all of ra/dec.
+
+    Args:
+        ax: matplotlib axes
+        ra: list of rectascensions
+        dec: list of declinations
+        proj: a projection instance
+        pad: float, how much padding between data and map boundary
+        bgcolor: matplotlib color to be used for ax
+
+    Returns:
+        ConicProjection
+    """
+
     proj = getOptimalConicProjection(ra, dec, proj_class=proj_class, ra0=ra0, dec0=dec0)
     setupConicAxes(ax, ra, dec, proj, pad=pad, bgcolor=bgcolor)
     return proj
