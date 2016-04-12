@@ -78,9 +78,12 @@ class SkymapperAxes(Axes):
         self.yaxis.set_ticks_position('none')
 
         self.set_center(None, None)
-        self.set_xlim(0, 360)
-        self.set_ylim(-90, 90)
-        self.set_autoscale_on(False)
+
+        # FIXME: probabaly want to override autoscale_view
+        # to properly handle wrapping introduced by margin
+        # and properlty wrap data. 
+        # It doesn't make sense to have xwidth > 360. 
+        self._tight = True
 
     def _set_lim_and_transforms(self):
         """
