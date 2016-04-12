@@ -662,7 +662,7 @@ def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, 
     setupConicAxes(ax, ra, dec, proj, pad=pad, bgcolor=bgcolor)
     return proj
 
-def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
+def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False):
     """Get number density of objects from RA/Dec in HealPix cells.
 
     Requires: healpy
@@ -671,6 +671,7 @@ def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
         ra: list of rectascensions
         dec: list of declinations
         nside: HealPix nside
+        per_area: return counts in units of 1/arcmin^2
         return_vertices: whether to also return the boundaries of HealPix cells
 
     Returns:
@@ -686,7 +687,9 @@ def getCountAtLocations(ra, dec, nside=512, return_vertices=False):
     # count how often each pixel is hit
     bc = np.bincount(ipix)
     pixels = np.nonzero(bc)[0]
-    bc = bc[bc>0] / hp.nside2resol(nside, arcmin=True)**2 # in arcmin^-2
+    bc = bc[bc>0]
+    if per_area:
+        bc /= hp.nside2resol(nside, arcmin=True)**2 # in arcmin^-2
     # get position of each pixel in RA/Dec
     theta, phi = hp.pix2ang(nside, pixels, nest=False)
     ra_ = phi*180/np.pi
