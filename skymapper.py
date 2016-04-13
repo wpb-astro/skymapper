@@ -662,6 +662,21 @@ def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, 
     setupConicAxes(ax, ra, dec, proj, pad=pad, bgcolor=bgcolor)
     return proj
 
+
+def getVertices(pixels, nside):
+    import healpy as hp
+    vertices = np.zeros((pixels.size, 4, 2))
+    for i in xrange(pixels.size):
+        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i])))
+        corners = np.array(corners) * 180. / np.pi
+        diff = corners[1] - corners[1][0]
+        diff[diff > 180] -= 360
+        diff[diff < -180] += 360
+        corners[1] = corners[1][0] + diff
+        vertices[i,:,0] = corners[1]
+        vertices[i,:,1] = 90.0 - corners[0]
+    return vertices
+
 def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False):
     """Get number density of objects from RA/Dec in HealPix cells.
 
@@ -676,7 +691,7 @@ def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False
 
     Returns:
         bc, ra_, dec_, [vertices]
-        bc: count of objects [per arcmin^2] in a HealPix cell if count > 0
+        bc: count of objects in a HealPix cell if count > 0
         ra_: rectascension of the cell center (same format as ra/dec)
         dec_: declinations of the cell center (same format as ra/dec)
         vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
@@ -698,20 +713,56 @@ def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False
     # get the vertices that confine each pixel
     # convert to RA/Dec (thanks to Eric Huff)
     if return_vertices:
-        vertices = np.zeros((pixels.size, 4, 2))
-        for i in xrange(pixels.size):
-            corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i])))
-            corners = np.array(corners) * 180. / np.pi
-            diff = corners[1] - corners[1][0]
-            diff[diff > 180] -= 360
-            diff[diff < -180] += 360
-            corners[1] = corners[1][0] + diff
-            vertices[i,:,0] = corners[1]
-            vertices[i,:,1] = 90.0 - corners[0]
-
+        vertices = getVertices(pixels, nside)
         return bc, ra_, dec_, vertices
     else:
         return bc, ra_, dec_
+
+def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vertices=False):
+    """Reduce values at given RA/Dec in HealPix cells to a scalar.
+
+    Requires: healpy
+
+    Args:
+        ra: list of rectascensions
+        dec: list of declinations
+        value: list of values to be reduced
+        reduce_fct: function to operate on values
+        nside: HealPix nside
+        per_area: return counts in units of 1/arcmin^2
+        return_vertices: whether to also return the boundaries of HealPix cells
+
+    Returns:
+        v, ra_, dec_, [vertices]
+        v: reduction of values in a HealPix cell if count > 0
+        ra_: rectascension of the cell center (same format as ra/dec)
+        dec_: declinations of the cell center (same format as ra/dec)
+        vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
+    """
+    import healpy as hp
+    # get healpix pixels
+    ipix = hp.ang2pix(nside, (90-dec)/180*np.pi, ra/180*np.pi, nest=False)
+    # count how often each pixel is hit, only use non-empty pixels
+    pixels = np.nonzero(np.bincount(ipix))[0]
+
+    v = np.empty(pixels.size)
+    for i in xrange(pixels.size):
+        sel = (ipix == pixels[i])
+        v[i] = reduce_fct(value[sel])
+
+    # get position of each pixel in RA/Dec
+    theta, phi = hp.pix2ang(nside, pixels, nest=False)
+    ra_ = phi*180/np.pi
+    dec_ = 90 - theta*180/np.pi
+
+    # get the vertices that confine each pixel
+    # convert to RA/Dec (thanks to Eric Huff)
+    if return_vertices:
+        vertices = getVertices(pixels, nside)
+        return v, ra_, dec_, vertices
+    else:
+        return v, ra_, dec_
+
 
 def plotHealpixPolygons(ax, projection, vertices, color=None, vmin=None, vmax=None, **kwargs):
     """Plot Healpix cell polygons onto map.
