@@ -150,6 +150,8 @@ class ConicProjection(object):
             # analytic solution for intersection of line with line at y
             top = self.__call__(ra, 90)
             bottom = self.__call__(ra, -90)
+            if y > top[1] or y < bottom[1]:
+                return None
             delta = (top[0] - bottom[0], top[1] - bottom[1])
             x = bottom[0] + (y - bottom[1]) * delta[0] / delta[1]
             if x >= xlim[0] and x <= xlim[1]:
@@ -500,14 +502,6 @@ def setParallelLabels(ax, proj, parallels, loc="bottom", fmt=degFormatter, **kwa
 
     # remove duplicates
     parallels_ = np.unique(parallels % 360)
-
-    # the outer boundaries need to be duplicated because the same
-    # parallel appears on the left and the right side of the map
-    if proj.ra_0 < 180:
-        outer = proj.ra_0 - 180
-    else:
-        outer = proj.ra_0 + 180
-    parallels_ = np.array(list(parallels_) + [outer])
 
     if loc == "bottom":
         ticks = []
