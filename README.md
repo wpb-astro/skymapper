@@ -26,11 +26,11 @@ More projections and plot types will be added as needed. Open an issue for any s
 
 The projection is not a full-fledged [matplotlib transformation](http://matplotlib.org/users/transforms_tutorial.html). It does allow you to zoom and drag interactively, but the tick labels and the mouse position do not update correctly. The underlying reason is that the map pretends (x,y) to be independent variables, which isn't true for a non-linear transformation.
 
-While perfectly sufficient for publication-quality plots, it's not ideal for exploratory work. A (failed) attempt to implement a complete transform is [here](aea_projection.py), but it throws some gibberish error message. It's based on [this example](http://matplotlib.org/examples/api/custom_projection_example.html), so if you feel up to it: please give it a try, maybe you get it to work!
+While perfectly sufficient for publication-quality plots, it's not ideal for exploratory work. An experimental attempt to implement a native matplotlib transform class is [here](aea_projection.py).
 
 ## Example uses
 
-The examples are based on the [first data release](http://des.ncsa.illinois.edu/releases/sva1) of the [Dark Energy Survey](http://www.darkenergysurvey.org), but any other data set with RA/Dec coordinates will do.
+The examples are based on the [first data release](http://des.ncsa.illinois.edu/releases/sva1) of the [Dark Energy Survey](http://www.darkenergysurvey.org), but any other data set with RA/Dec coordinates will do. The respective codes can be found in [examples/](examples/).
 
 ###Density / depth map
 
