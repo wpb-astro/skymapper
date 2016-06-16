@@ -698,6 +698,7 @@ def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False
     pixels = np.nonzero(bc)[0]
     bc = bc[bc>0]
     if per_area:
+        bc = bc.astype('f8')
         bc /= hp.nside2resol(nside, arcmin=True)**2 # in arcmin^-2
     # get position of each pixel in RA/Dec
     theta, phi = hp.pix2ang(nside, pixels, nest=False)
