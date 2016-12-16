@@ -657,11 +657,11 @@ def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, 
     return proj
 
 
-def getVertices(pixels, nside):
+def getHealpixVertices(pixels, nside, nest=False):
     import healpy as hp
     vertices = np.zeros((pixels.size, 4, 2))
     for i in xrange(pixels.size):
-        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i])))
+        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i], nest=nest)))
         corners = np.array(corners) * 180. / np.pi
         diff = corners[1] - corners[1][0]
         diff[diff > 180] -= 360
@@ -708,7 +708,7 @@ def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False
     # get the vertices that confine each pixel
     # convert to RA/Dec (thanks to Eric Huff)
     if return_vertices:
-        vertices = getVertices(pixels, nside)
+        vertices = getHealpixVertices(pixels, nside)
         return bc, ra_, dec_, vertices
     else:
         return bc, ra_, dec_
@@ -753,7 +753,7 @@ def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vert
     # get the vertices that confine each pixel
     # convert to RA/Dec (thanks to Eric Huff)
     if return_vertices:
-        vertices = getVertices(pixels, nside)
+        vertices = getHealpixVertices(pixels, nside)
         return v, ra_, dec_, vertices
     else:
         return v, ra_, dec_
