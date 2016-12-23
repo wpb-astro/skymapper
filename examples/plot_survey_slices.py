@@ -1,11 +1,11 @@
 #!/bin/env python
 
-import skymapper
+import skymapper as skm
 import numpy as np
 import matplotlib.pyplot as plt
 
 def getCatalog():
-    # dummy catalog 
+    # dummy catalog
     ra = np.random.uniform(size=10000, low=45, high=75)
     dec = np.random.uniform(size=10000, low=-54, high=-44)
     z = np.random.uniform(size=10000, low=0.2, high=0.6)
@@ -41,10 +41,10 @@ if __name__ == "__main__":
             ax = fig.add_subplot(111, aspect='equal')
             if proj is None:
                 # define projection and reference ax to hold
-                proj = skymapper.createConicMap(ax, ra, dec, bgcolor='w')
+                proj = skm.createConicMap(ax, ra, dec, bgcolor='w')
                 ax0 = ax
             else:
-                skymapper.cloneMap(ax0, ax)
+                skm.cloneMap(ax0, ax)
 
             # plot data in slice
             x,y = proj(ra[sel], dec[sel])
@@ -53,10 +53,10 @@ if __name__ == "__main__":
             # add labels and ax
             parallels = np.arange(0. ,360., reticule)
             meridians = np.arange(-90., 90., reticule)
-            skymapper.setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=3)
-            skymapper.setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=3)
-            skymapper.setParallelLabels(ax, proj, parallels, loc="bottom")
-            skymapper.setMeridianLabels(ax, proj, meridians, loc="left")
+            skm.setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=3)
+            skm.setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=3)
+            skm.setParallelLabels(ax, proj, parallels, loc="bottom")
+            skm.setMeridianLabels(ax, proj, meridians, loc="left")
             ax.set_title('%s: $z = %.3f\pm%.3f$' % (method, z_mean, dz/2))
 
             fig.tight_layout()
