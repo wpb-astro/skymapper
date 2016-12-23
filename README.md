@@ -42,6 +42,7 @@ We transform those vertices and put them as polygons onto the map. We finish up 
 # load projection and helper functions
 import numpy as np
 import skymapper as skm
+import matplotlib.pylab as plt
 
 # load RA/Dec from catalog [not implemented]
 ra, dec = getCoords(catalogfile)
@@ -75,13 +76,13 @@ poly = skm.plotHealpixPolygons(ax, proj, vertices, color=bc, vmin=vmin, vmax=vma
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="2%", pad=0.0)
-cb = plt.colorbar(poly, cax=cax)
+cb = fig.colorbar(poly, cax=cax)
 cb.set_label('$n_g$ [arcmin$^{-2}$]')
 cb.solids.set_edgecolor("face")
 
 # show (and save) ...
-plt.tight_layout()
-plt.show()
+fig.tight_layout()
+fig.show()
 fig.savefig(imagefile)
 ```
 
@@ -102,6 +103,7 @@ The 2nd version is not exact and thus requires a bit of care to make sure that t
 # load projection and helper functions
 import numpy as np
 import skymapper as skm
+import matplotlib.pylab as plt
 
 # setup figure
 import matplotlib.cm as cm
@@ -140,7 +142,7 @@ scc = ax.scatter(x,y, c='None', edgecolors='k', linewidths=1, s=richness, marker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="3%", pad=0.0)
-cb = plt.colorbar(sc, cax=cax)
+cb = fig.colorbar(sc, cax=cax)
 cb.set_label('matter density $\kappa_E$ [compared to cosmic mean]')
 ticks = np.linspace(vmin, vmax, 5)
 cb.set_ticks(ticks)
