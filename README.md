@@ -40,14 +40,15 @@ We transform those vertices and put them as polygons onto the map. We finish up 
 
 ```python
 # load projection and helper functions
-from skymapper import *
+import numpy as np
+import skymapper as skm
 
 # load RA/Dec from catalog [not implemented]
 ra, dec = getCoords(catalogfile)
 
 # get count in healpix cells, restrict to non-empty cells
 nside = 1024
-bc, ra, dec, vertices = getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
+bc, ra, dec, vertices = skm.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
 
 # setup figure
 import matplotlib.cm as cm
@@ -56,19 +57,19 @@ fig = plt.figure(figsize=(6.5,6))
 ax = fig.add_subplot(111, aspect='equal')
 
 # setup map: define AEA map optimal for given RA/Dec
-proj = createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection)
+proj = skm.createConicMap(ax, ra, dec, proj_class=skm.AlbersEqualAreaProjection)
 # add lines and labels for meridians/parallels (separation 5 deg)
-meridians = np.linspace(-60, -45, 4)
-parallels = np.linspace(60, 90, 7)
-setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
-setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
-setMeridianLabels(ax, proj, meridians, loc="left", fmt=pmDegFormatter)
-setParallelLabels(ax, proj, parallels, loc="bottom")
+sep = 5
+meridians = np.arange(-90, 90+sep, sep)
+parallels = np.arange(0, 360+sep, sep)
+skm.setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+skm.setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+skm.setMeridianLabels(ax, proj, meridians, loc="left", fmt=skm.pmDegFormatter)
+skm.setParallelLabels(ax, proj, parallels, loc="bottom")
 
 # add healpix counts from vertices
-vmin = 4
-vmax = 9
-poly = plotHealpixPolygons(ax, proj, vertices, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=2, rasterized=True)
+vmin, vmax = np.percentiles(bc,[10,90])
+poly = skm.plotHealpixPolygons(ax, proj, vertices, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=2, rasterized=True)
 
 # add colorbar
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -76,8 +77,6 @@ divider = make_axes_locatable(ax)
 cax = divider.append_axes("right", size="2%", pad=0.0)
 cb = plt.colorbar(poly, cax=cax)
 cb.set_label('$n_g$ [arcmin$^{-2}$]')
-ticks = np.linspace(vmin, vmax, 6)
-cb.set_ticks(ticks)
 cb.solids.set_edgecolor("face")
 
 # show (and save) ...
@@ -101,7 +100,8 @@ The 2nd version is not exact and thus requires a bit of care to make sure that t
 
 ```python
 # load projection and helper functions
-from skymapper import *
+import numpy as np
+import skymapper as skm
 
 # setup figure
 import matplotlib.cm as cm
@@ -114,19 +114,19 @@ ax = fig.add_subplot(111, aspect='equal')
 ra, dec, kappa = getKappa()
 
 # setup map: define AEA map optimal for given RA/Dec
-proj = createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection)
+proj = skm.createConicMap(ax, ra, dec, proj_class=skm.AlbersEqualAreaProjection)
 # add lines and labels for meridians/parallels (separation 5 deg)
 meridians = np.linspace(-60, -45, 4)
 parallels = np.linspace(60, 90, 7)
-setMeridianPatches(ax, proj, meridians, linestyle=':', lw=0.5, zorder=2)
-setParallelPatches(ax, proj, parallels, linestyle=':', lw=0.5, zorder=2)
-setMeridianLabels(ax, proj, meridians, loc="left", fmt=pmDegFormatter)
-setParallelLabels(ax, proj, parallels, loc="bottom", fmt=hourAngleFormatter)
+skm.setMeridianPatches(ax, proj, meridians, linestyle=':', lw=0.5, zorder=2)
+skm.setParallelPatches(ax, proj, parallels, linestyle=':', lw=0.5, zorder=2)
+skm.setMeridianLabels(ax, proj, meridians, loc="left", fmt=skm.pmDegFormatter)
+skm.setParallelLabels(ax, proj, parallels, loc="bottom", fmt=skm.hourAngleFormatter)
 
 # convert to map coordinates and plot a marker for each point
 x,y = proj(ra, dec)
 marker = 's'
-markersize = getMarkerSizeToFill(fig, ax, x, y)
+markersize = skm.getMarkerSizeToFill(fig, ax, x, y)
 vmin,vmax = -0.01, 0.01
 sc = ax.scatter(x,y, c=kappa, edgecolors='None', marker=marker, s=markersize, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=True, zorder=1)
 
