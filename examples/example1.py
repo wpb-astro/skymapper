@@ -5,11 +5,19 @@ import matplotlib.pylab as plt
 
 def getCatalog(size=10000):
     # dummy catalog
-    ra = np.random.uniform(size=size, low=45, high=75)
-    dec = np.random.uniform(size=size, low=-54, high=-44)
+    ra = np.random.uniform(size=size, low=-55, high=100)
+    dec = np.random.uniform(size=size, low=-65, high=-40)
     return ra, dec
 
-def plotDensity(ra, dec, nside=1024, sep=5., proj_class=skm.AlbersEqualAreaProjection, figsize=None):
+def plotFootprint(ax, proj, **kwargs):
+    from matplotlib.patches import Polygon
+    data = np.loadtxt('des-round13-poly.txt')
+    ra, dec = data[:,0], data[:,1]
+    x,y  = proj(ra, dec)
+    poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
+    ax.add_artist(poly)
+
+def plotDensity(ra, dec, nside=1024, sep=5., proj_class=skm.LambertConformalProjection, figsize=None):
     # get count in healpix cells, restrict to non-empty cells
     bc, _, _, vertices = skm.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
 
@@ -23,7 +31,6 @@ def plotDensity(ra, dec, nside=1024, sep=5., proj_class=skm.AlbersEqualAreaProje
     proj = skm.createConicMap(ax, ra, dec, proj_class=proj_class)
 
     # add lines and labels for meridians/parallels (separation 5 deg)
-    sep = 5
     meridians = np.arange(-90, 90+sep, sep)
     parallels = np.arange(0, 360+sep, sep)
     skm.setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
@@ -49,7 +56,7 @@ def plotDensity(ra, dec, nside=1024, sep=5., proj_class=skm.AlbersEqualAreaProje
     # show (and save) ...
     fig.tight_layout()
     fig.show()
-    return fig, ax
+    return fig, ax, proj
 
 
 if __name__ == "__main__":
@@ -59,5 +66,9 @@ if __name__ == "__main__":
     ra, dec = getCatalog(size)
 
     # plot density in healpix cells
-    nside = 256
-    fig, ax = plotDensity(ra, dec, nside=nside)
+    nside = 64
+    sep = 15
+    fig, ax, proj = plotDensity(ra, dec, nside=nside, sep=sep)
+
+    # add DES footprint
+    plotFootprint(ax, proj, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
