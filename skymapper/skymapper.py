@@ -765,7 +765,7 @@ def createFigureAx():
     return fig, ax
 
 
-def plotDensity(ra, dec, nside=1024, sep=5., proj_class=LambertConformalProjection, ax=None):
+def plotDensity(ra, dec, nside=1024, sep=5., proj_class=AlbersEqualAreaProjection, ax=None):
     """Plot density map on optimally chosen projection.
 
     Args:
