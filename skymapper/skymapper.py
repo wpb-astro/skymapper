@@ -851,6 +851,14 @@ def plotHealpixPolygons(vertices, proj, color=None, vmin=None, vmax=None, ax=Non
     ax.add_collection(coll)
     return fig, ax, coll
 
+# decorator for registering the survey footprint loader functions
+footprint_loader = {}
+
+def register(surveyname=""):
+    def decorate(func):
+        footprint_loader[surveyname] = func
+        return func
+    return decorate
 
 def plotFootprint(surveyname, proj, ax=None, **kwargs):
     """Plot survey footprint polygon onto map.
@@ -870,11 +878,7 @@ def plotFootprint(surveyname, proj, ax=None, **kwargs):
     else:
         fig = ax.get_figure()
 
-    import os
-    this_dir, this_filename = os.path.split(__file__)
-    datafile = os.path.join(this_dir, "surveys", "des-round13-poly.txt")
-    data = np.loadtxt(datafile)
-    ra, dec = data[:,0], data[:,1]
+    ra, dec = footprint_loader[surveyname]()
     x,y  = proj(ra, dec)
     from matplotlib.patches import Polygon
     poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
