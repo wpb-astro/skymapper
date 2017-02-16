@@ -759,28 +759,128 @@ def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vert
         return v, ra_, dec_
 
 
-def plotHealpixPolygons(ax, projection, vertices, color=None, vmin=None, vmax=None, **kwargs):
+def createFigureAx():
+    fig = plt.figure()
+    ax = fig.add_subplot(111, aspect='equal')
+    return fig, ax
+
+
+def plotDensity(ra, dec, nside=1024, sep=5., proj_class=LambertConformalProjection, ax=None):
+    """Plot density map on optimally chosen projection.
+
+    Args:
+        ra: list of rectascensions
+        dec: list of declinations
+        nside: HealPix nside
+        sep: separation of graticules
+        proj_class: constructor of projection class
+        ax: matplotlib axes (will be created if not given)
+    Returns:
+        figure, axes, matplotlib.collections.PolyCollection
+    """
+
+    # get count in healpix cells, restrict to non-empty cells
+    bc, _, _, vertices = getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
+
+    # setup figure
+    if ax is None:
+        fig, ax = createFigureAx()
+    else:
+        fig = ax.get_figure()
+
+    # setup map: define AEA map optimal for given RA/Dec
+    proj = createConicMap(ax, ra, dec, proj_class=proj_class)
+
+    # add lines and labels for meridians/parallels
+    meridians = np.arange(-90, 90+sep, sep)
+    parallels = np.arange(0, 360+sep, sep)
+    setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+    setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+    setMeridianLabels(ax, proj, meridians, loc="left", fmt=pmDegFormatter)
+    if dec.mean() > 0:
+        setParallelLabels(ax, proj, parallels, loc="bottom")
+    else:
+        setParallelLabels(ax, proj, parallels, loc="top")
+
+    # add healpix counts from vertices
+    import matplotlib.cm as cm
+    cmap = cm.YlOrRd
+    vmin, vmax = np.percentile(bc,[10,90])
+    _, _, poly = plotHealpixPolygons(vertices, proj, color=bc, vmin=vmin, vmax=vmax, ax=ax, cmap=cmap, zorder=2, rasterized=True)
+
+    # add colorbar
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="2%", pad=0.0)
+    cb = fig.colorbar(poly, cax=cax)
+    cb.set_label('$n_g$ [arcmin$^{-2}$]')
+    cb.solids.set_edgecolor("face")
+
+    # show (and save) ...
+    fig.tight_layout()
+    fig.show()
+    return fig, ax, proj
+
+
+def plotHealpixPolygons(vertices, proj, color=None, vmin=None, vmax=None, ax=None, **kwargs):
     """Plot Healpix cell polygons onto map.
 
     Args:
-        ax: matplotlib axes
-        projection: map projection
         vertices: Healpix cell boundaries in RA/Dec, from getCountAtLocations()
+        proj: map projection
         color: string or matplib color, or numeric array to set polygon colors
         vmin: if color is numeric array, use vmin to set color of minimum
         vmax: if color is numeric array, use vmin to set color of minimum
+        ax: matplotlib axes
         **kwargs: matplotlib.collections.PolyCollection keywords
     Returns:
-        matplotlib.collections.PolyCollection
+        figure, axes, matplotlib.collections.PolyCollection
     """
+    # setup figure
+    if ax is None:
+        fig, ax = createFigureAx()
+    else:
+        fig = ax.get_figure()
+
     from matplotlib.collections import PolyCollection
     vertices_ = np.empty_like(vertices)
-    vertices_[:,:,0], vertices_[:,:,1] = projection(vertices[:,:,0], vertices[:,:,1])
+    vertices_[:,:,0], vertices_[:,:,1] = proj(vertices[:,:,0], vertices[:,:,1])
     coll = PolyCollection(vertices_, array=color, **kwargs)
     coll.set_clim(vmin=vmin, vmax=vmax)
     coll.set_edgecolor("face")
     ax.add_collection(coll)
-    return coll
+    return fig, ax, coll
+
+
+def plotFootprint(surveyname, proj, ax=None, **kwargs):
+    """Plot survey footprint polygon onto map.
+
+    Args:
+        surveyname: name of the survey
+        proj: map projection
+        ax: matplotlib axes
+        **kwargs: matplotlib.collections.PolyCollection keywords
+    Returns:
+        figure, axes, matplotlib.collections.PolyCollection
+    """
+
+    # setup figure
+    if ax is None:
+        fig, ax = createFigureAx()
+    else:
+        fig = ax.get_figure()
+
+    import os
+    this_dir, this_filename = os.path.split(__file__)
+    datafile = os.path.join(this_dir, "surveys", "des-round13-poly.txt")
+    data = np.loadtxt(datafile)
+    ra, dec = data[:,0], data[:,1]
+    x,y  = proj(ra, dec)
+    from matplotlib.patches import Polygon
+    poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
+    ax.add_artist(poly)
+    return fig, ax, poly
+
 
 def getMarkerSizeToFill(fig, ax, x, y):
     """Get the size of a marker so that data points can fill axes.
