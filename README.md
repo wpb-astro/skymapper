@@ -1,10 +1,26 @@
 # Skymapper
 
-A number of python / matplotlib scripts to map astronomical survey data from the celestial sphere onto 2D. The purpose of these methods is to facilitate the creation of publication-quality plots (as well as interactive graphics or movies) with a python-based workflow many astronomers are accustomed to.
+A collection of python / matplotlib scripts to map astronomical survey data from the celestial sphere onto 2D. The purpose of these methods is to facilitate the creation of publication-quality plots (as well as interactive graphics or movies) with a python-based workflow many astronomers are accustomed to.
+
+What can it do? For instance, [creating a density map](examples/example1.py) from a catalog in a few lines:
+
+```python
+# plot density in healpix cells
+nside = 64
+sep = 15
+fig, ax, proj = skm.plotDensity(ra, dec, nside=nside, sep=sep)
+
+# add DES footprint
+skm.plotFootprint('DES', proj, ax=ax, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
+```
+
+![Random density in DES footprint](examples/example1.png)
+
+## More details
 
 The code requires matplotlib and numpy, but is independent of Basemap, which is not part of the matplotlib distributions anymore and can be *very* troublesome to install.
 
-Currently, three map projections are available: the **Albers Equal-Area**, the **Lambert Conformal**, and the **Equidistant** conics (an explanation why exactly these ones, and which of them is better where, is [here](http://pmelchior.net/blog/map-projections-for-surveys.html)). Once set up, they can be used to map any point data or HealPix polygons onto regular matplotlib axes. The essential parts of the workflow are
+Currently, three map projections are available: the **Albers Equal-Area**, the **Lambert Conformal**, and the **Equidistant** conics (an explanation why exactly these ones, and which of them is better when, is [here](http://pmelchior.net/blog/map-projections-for-surveys.html)). Once set up, they can be used to map any point data or (HealPix) polygons onto regular matplotlib axes. The essential parts of the workflow are
 
 1. Creating the projection, e.g. with `AlbersEqualAreaProjection(ra0,dec0,dec1,dec2)`
 2. Setting up an  `matplotlib.axes` to hold the data
@@ -14,9 +30,9 @@ The parameters of conic projections are the reference point `(ra0,dec0)` that ma
 
 Steps 1 and 2 can be combined with a convenience function:
 
- ````
+```python
 aea = createConicMap(ax, ra, dec, proj_type=AlbersEqualAreaProjection)
- ````
+```
 
 This method takes a predefined `axes` and lists of right ascension and declination, determines the optimal setting for the conic projections, and sets the axes ranges to hold all of `ra, dec`.
 
@@ -30,7 +46,7 @@ While perfectly sufficient for publication-quality plots, it's not ideal for exp
 
 ## Example uses
 
-The examples are based on the [first data release](http://des.ncsa.illinois.edu/releases/sva1) of the [Dark Energy Survey](http://www.darkenergysurvey.org), but any other data set with RA/Dec coordinates will do. The respective codes can be found in [examples/](examples/).
+The examples are based on the [first data release](http://des.ncsa.illinois.edu/releases/sva1) of the [Dark Energy Survey](http://www.darkenergysurvey.org), but any other data set with RA/Dec coordinates will do. You can see how to set up the map and how to style all elements of the visualization.
 
 ###Density / depth map
 

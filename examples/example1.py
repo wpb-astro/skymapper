@@ -18,10 +18,13 @@ if __name__ == "__main__":
     # plot density in healpix cells
     nside = 64
     sep = 15
-    fig, ax, proj = skm.plotDensity(ra, dec, nside=nside, sep=sep)
+
+    fig = plt.figure(figsize=(8,4))
+    ax = fig.add_subplot(111, aspect='equal')
+    _, _, proj = skm.plotDensity(ra, dec, nside=nside, sep=sep, ax=ax)
 
     # add DES footprint
     skm.plotFootprint('DES', proj, ax=ax, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
 
     # add title
-    fig.suptitle('Silly random in DES')
+    #fig.suptitle('Silly random in DES')
