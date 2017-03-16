@@ -576,7 +576,7 @@ def getOptimalConicProjection(ra, dec, proj_class=AlbersEqualAreaProjection, ra0
     # set up AEA map
     return proj_class(ra0, dec0, dec1, dec2)
 
-def setupConicAxes(ax, ra, dec, proj, pad=0.02, bgcolor='#aaaaaa'):
+def setupConicAxes(ax, ra, dec, proj, pad=0.02):
     """Set up axes for conic projection.
 
     The function preconfigures the matplotlib axes and sets the proper x/y
@@ -588,13 +588,10 @@ def setupConicAxes(ax, ra, dec, proj, pad=0.02, bgcolor='#aaaaaa'):
         dec: list of declinations
         proj: a projection instance
         pad: float, how much padding between data and map boundary
-        bgcolor: matplotlib color to be used for ax
 
     Returns:
         None
     """
-    if bgcolor is not None:
-        ax.set_axis_bgcolor(bgcolor)
     # remove ticks as they look odd with curved/angled parallels/meridians
     ax.xaxis.set_tick_params(which='both', length=0)
     ax.yaxis.set_tick_params(which='both', length=0)
@@ -653,7 +650,7 @@ def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, 
     """
 
     proj = getOptimalConicProjection(ra, dec, proj_class=proj_class, ra0=ra0, dec0=dec0)
-    setupConicAxes(ax, ra, dec, proj, pad=pad, bgcolor=bgcolor)
+    setupConicAxes(ax, ra, dec, proj, pad=pad)
     return proj
 
 
@@ -759,37 +756,109 @@ def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vert
         return v, ra_, dec_
 
 
-def createFigureAx():
-    fig = plt.figure()
-    ax = fig.add_subplot(111, aspect='equal')
+def createFigureAx(ax=None):
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, aspect='equal')
+    else:
+        fig = ax.get_figure()
     return fig, ax
 
 
-def plotDensity(ra, dec, nside=1024, sep=5., proj_class=AlbersEqualAreaProjection, ax=None):
+def plotDensity(ra, dec, nside=1024, sep=5, proj_class=AlbersEqualAreaProjection, ax=None):
     """Plot density map on optimally chosen projection.
 
     Args:
         ra: list of rectascensions
         dec: list of declinations
         nside: HealPix nside
-        sep: separation of graticules
+        sep: separation of graticules [deg]
         proj_class: constructor of projection class
         ax: matplotlib axes (will be created if not given)
     Returns:
         figure, axes, matplotlib.collections.PolyCollection
     """
 
+    # setup figure
+    fig, ax = createFigureAx(ax=ax)
+
+    # setup map: define map optimal for given RA/Dec
+    proj = createConicMap(ax, ra, dec, proj_class=proj_class)
+
     # get count in healpix cells, restrict to non-empty cells
     bc, _, _, vertices = getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
 
-    # setup figure
-    if ax is None:
-        fig, ax = createFigureAx()
-    else:
-        fig = ax.get_figure()
+    # make a map of the vertices
+    poly = makeVertexMap(vertices, bc, proj, ax=ax, sep=sep, cmap="YlOrRd")
 
-    # setup map: define AEA map optimal for given RA/Dec
+    # create nice map
+    cb_label='$n$ [arcmin$^{-2}$]'
+    makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=poly, cb_label=cb_label)
+
+    fig.show()
+    return fig, ax, proj
+
+
+def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpix value", proj_class=AlbersEqualAreaProjection, cmap="YlOrRd", ax=None):
+    """Plot HealPix map on optimally chosen projection.
+
+    Args:
+        m: Healpix map array
+        nside: HealPix nside
+        nest: HealPix nest
+        use_vertices: calculate individual polygons per HealPix cell
+        sep: separation of graticules [deg]
+        proj_class: constructor of projection class
+        cmap: matplotlib colormap name
+        ax: matplotlib axes (will be created if not given)
+    Returns:
+        figure, axes, matplotlib.collections.PolyCollection
+    """
+
+    # setup figure
+    fig, ax = createFigureAx(ax=ax)
+
+    # determine ra, dec of map; restrict to non-empty cells
+    pixels = np.flatnonzero(m)
+
+    vertices = getHealpixVertices(pixels, nside, nest=nest)
+    ra_dec = vertices.mean(axis=1)
+    ra, dec = ra_dec[:,0], ra_dec[:,1]
+
+    # setup map: define map optimal for given RA/Dec
     proj = createConicMap(ax, ra, dec, proj_class=proj_class)
+
+    # make a map of the vertices
+    poly = makeVertexMap(vertices, m[pixels], proj, ax=ax, sep=sep, cmap=cmap)
+
+    # create nice map
+    makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=poly, cb_label=cb_label)
+
+    fig.show()
+    return fig, ax, proj
+
+
+
+def plotMap(ra, dec, value, sep=5, cb_label="Healpix value", proj_class=AlbersEqualAreaProjection, cmap="YlOrRd", ax=None):
+    pass
+
+
+def makeVertexMap(vertices, color, proj, ax=None, sep=5, cmap="YlOrRd", cb_label=""):
+
+    # add healpix counts from vertices
+    vmin, vmax = np.percentile(color,[10,90])
+    return addPolygons(vertices, proj, ax, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
+
+def makeScatterMap(ra, dec, val, proj, ax=None, sep=5, cb_label="", **kwargs):
+
+    x,y = proj(ra, dec)
+    marker = 's'
+    markersize = getMarkerSizeToFill(fig, ax, x, y)
+    sc = ax.scatter(x, y, c=val, rasterized=True, **kwargs)
+
+    return sc
+
+def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None, cb_label=""):
 
     # add lines and labels for meridians/parallels
     meridians = np.arange(-90, 90+sep, sep)
@@ -802,54 +871,20 @@ def plotDensity(ra, dec, nside=1024, sep=5., proj_class=AlbersEqualAreaProjectio
     else:
         setParallelLabels(ax, proj, parallels, loc="top")
 
-    # add healpix counts from vertices
-    import matplotlib.cm as cm
-    cmap = cm.YlOrRd
-    vmin, vmax = np.percentile(bc,[10,90])
-    _, _, poly = plotHealpixPolygons(vertices, proj, color=bc, vmin=vmin, vmax=vmax, ax=ax, cmap=cmap, zorder=2, rasterized=True)
+    if bgcolor is not None:
+        ax.set_axis_bgcolor(bgcolor)
+
 
     # add colorbar
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="2%", pad=0.0)
-    cb = fig.colorbar(poly, cax=cax)
-    cb.set_label('$n$ [arcmin$^{-2}$]')
-    cb.solids.set_edgecolor("face")
-
-    # show (and save) ...
+    if cb_collection is not None:
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="2%", pad=0.0)
+        cb = fig.colorbar(cb_collection, cax=cax)
+        cb.set_label(cb_label)
+        cb.solids.set_edgecolor("face")
     fig.tight_layout()
-    fig.show()
-    return fig, ax, proj
 
-
-def plotHealpixPolygons(vertices, proj, color=None, vmin=None, vmax=None, ax=None, **kwargs):
-    """Plot Healpix cell polygons onto map.
-
-    Args:
-        vertices: Healpix cell boundaries in RA/Dec, from getCountAtLocations()
-        proj: map projection
-        color: string or matplib color, or numeric array to set polygon colors
-        vmin: if color is numeric array, use vmin to set color of minimum
-        vmax: if color is numeric array, use vmin to set color of minimum
-        ax: matplotlib axes
-        **kwargs: matplotlib.collections.PolyCollection keywords
-    Returns:
-        figure, axes, matplotlib.collections.PolyCollection
-    """
-    # setup figure
-    if ax is None:
-        fig, ax = createFigureAx()
-    else:
-        fig = ax.get_figure()
-
-    from matplotlib.collections import PolyCollection
-    vertices_ = np.empty_like(vertices)
-    vertices_[:,:,0], vertices_[:,:,1] = proj(vertices[:,:,0], vertices[:,:,1])
-    coll = PolyCollection(vertices_, array=color, **kwargs)
-    coll.set_clim(vmin=vmin, vmax=vmax)
-    coll.set_edgecolor("face")
-    ax.add_collection(coll)
-    return fig, ax, coll
 
 # decorator for registering the survey footprint loader functions
 footprint_loader = {}
@@ -860,7 +895,8 @@ def register(surveyname=""):
         return func
     return decorate
 
-def plotFootprint(surveyname, proj, ax=None, **kwargs):
+
+def addFootprint(surveyname, proj, ax, **kwargs):
     """Plot survey footprint polygon onto map.
 
     Args:
@@ -884,6 +920,30 @@ def plotFootprint(surveyname, proj, ax=None, **kwargs):
     poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
     ax.add_artist(poly)
     return fig, ax, poly
+
+
+def addPolygons(vertices, proj, ax, color=None, vmin=None, vmax=None, **kwargs):
+    """Plot polygons (e.g. Healpix cells) onto map.
+
+    Args:
+        vertices: Healpix cell boundaries in RA/Dec, from getCountAtLocations()
+        proj: map projection
+        ax: matplotlib axes
+        color: string or matplib color, or numeric array to set polygon colors
+        vmin: if color is numeric array, use vmin to set color of minimum
+        vmax: if color is numeric array, use vmin to set color of minimum
+        **kwargs: matplotlib.collections.PolyCollection keywords
+    Returns:
+        matplotlib.collections.PolyCollection
+    """
+    from matplotlib.collections import PolyCollection
+    vertices_ = np.empty_like(vertices)
+    vertices_[:,:,0], vertices_[:,:,1] = proj(vertices[:,:,0], vertices[:,:,1])
+    coll = PolyCollection(vertices_, array=color, **kwargs)
+    coll.set_clim(vmin=vmin, vmax=vmax)
+    coll.set_edgecolor("face")
+    ax.add_collection(coll)
+    return coll
 
 
 def getMarkerSizeToFill(fig, ax, x, y):
