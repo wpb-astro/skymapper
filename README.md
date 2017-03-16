@@ -48,7 +48,7 @@ While perfectly sufficient for publication-quality plots, it's not ideal for exp
 
 The examples are based on the [first data release](http://des.ncsa.illinois.edu/releases/sva1) of the [Dark Energy Survey](http://www.darkenergysurvey.org), but any other data set with RA/Dec coordinates will do. You can see how to set up the map and how to style all elements of the visualization.
 
-###Density / depth map
+### Density / depth map
 
 We use healpy to pixelate the sky, and count how many objects from a given catalog fall in each pixel. The relevant function call is `getCountAtLocations`, which returns a list of counts (in units of 1/arcmin^2), cell RA and Dec, and (optionally) the vertices of a polygon that confines the cell, for each cell with non-zero count.
 
@@ -86,7 +86,7 @@ skm.setParallelLabels(ax, proj, parallels, loc="bottom")
 
 # add healpix counts from vertices
 vmin, vmax = np.percentiles(bc,[10,90])
-poly = skm.plotHealpixPolygons(ax, proj, vertices, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=2, rasterized=True)
+fig, ax, poly = skm.plotHealpixPolygons(vertices, proj, ax=ax, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=2, rasterized=True)
 
 # add colorbar
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -106,7 +106,7 @@ The result (with DES SV data) looks like this (taken from [Crocce et al. (2016)]
 
 ![Density map of benchmark galaxies in DES](examples/depth_map_lss_1024_YlOrRd_4-9_gray.png)
 
-###Scalar function map with scatter plot
+### Scalar function map with scatter plot
 
 If the data is in the form of a scalar function, defined on a regular grid in RA/Dec, there are two options to plot it.
 

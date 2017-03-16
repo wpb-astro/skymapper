@@ -813,7 +813,7 @@ def plotDensity(ra, dec, nside=1024, sep=5., proj_class=AlbersEqualAreaProjectio
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="2%", pad=0.0)
     cb = fig.colorbar(poly, cax=cax)
-    cb.set_label('$n_g$ [arcmin$^{-2}$]')
+    cb.set_label('$n$ [arcmin$^{-2}$]')
     cb.solids.set_edgecolor("face")
 
     # show (and save) ...
