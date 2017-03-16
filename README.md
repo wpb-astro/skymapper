@@ -5,20 +5,28 @@ A collection of python / matplotlib scripts to map astronomical survey data from
 What can it do? For instance, [creating a density map](examples/example1.py) from a catalog in a few lines:
 
 ```python
+import skymapper as skm
+
 # plot density in healpix cells
 nside = 64
 sep = 15
 fig, ax, proj = skm.plotDensity(ra, dec, nside=nside, sep=sep)
 
+# ... same with a Healpix map m
+fig, ax, proj = skm.plotHealpix(m, nside, sep=sep, cb_label='Healpix cell value')
+
+# ... or an unordered list of ra,dec,val (only works for equal-area projections)
+fig, ax, proj = skm.plotMap(ra, dec, val, sep=sep, cb_label='Map value')
+
 # add DES footprint
-skm.plotFootprint('DES', proj, ax=ax, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
+skm.addFootprint('DES', proj, ax, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
 ```
 
 ![Random density in DES footprint](examples/example1.png)
 
-## More details
+## Background
 
-The code requires matplotlib and numpy, but is independent of Basemap, which is not part of the matplotlib distributions anymore and can be *very* troublesome to install.
+The code requires matplotlib and numpy (and likely healpy), but is independent of Basemap, which is not part of the matplotlib distributions anymore and can be *very* troublesome to install.
 
 Currently, three map projections are available: the **Albers Equal-Area**, the **Lambert Conformal**, and the **Equidistant** conics (an explanation why exactly these ones, and which of them is better when, is [here](http://pmelchior.net/blog/map-projections-for-surveys.html)). Once set up, they can be used to map any point data or (HealPix) polygons onto regular matplotlib axes. The essential parts of the workflow are
 
@@ -31,7 +39,7 @@ The parameters of conic projections are the reference point `(ra0,dec0)` that ma
 Steps 1 and 2 can be combined with a convenience function:
 
 ```python
-aea = createConicMap(ax, ra, dec, proj_type=AlbersEqualAreaProjection)
+aea = skm.createConicMap(ax, ra, dec, proj_type=AlbersEqualAreaProjection)
 ```
 
 This method takes a predefined `axes` and lists of right ascension and declination, determines the optimal setting for the conic projections, and sets the axes ranges to hold all of `ra, dec`.
@@ -44,11 +52,13 @@ The projection is not a full-fledged [matplotlib transformation](http://matplotl
 
 While perfectly sufficient for publication-quality plots, it's not ideal for exploratory work. An experimental attempt to implement a native matplotlib transform class is [here](aea_projection.py).
 
-## Example uses
+## Detailed examples
 
 The examples are based on the [first data release](http://des.ncsa.illinois.edu/releases/sva1) of the [Dark Energy Survey](http://www.darkenergysurvey.org), but any other data set with RA/Dec coordinates will do. You can see how to set up the map and how to style all elements of the visualization.
 
 ### Density / depth map
+
+This example explains what happens inside of `plotHealpix()`, in case you want to modify specific aspects.
 
 We use healpy to pixelate the sky, and count how many objects from a given catalog fall in each pixel. The relevant function call is `getCountAtLocations`, which returns a list of counts (in units of 1/arcmin^2), cell RA and Dec, and (optionally) the vertices of a polygon that confines the cell, for each cell with non-zero count.
 
@@ -63,7 +73,7 @@ import matplotlib.pylab as plt
 # load RA/Dec from catalog [not implemented]
 ra, dec = getCoords(catalogfile)
 
-# get count in healpix cells, restrict to non-empty cells
+# get count in healpix cells (as vertices), restrict to non-empty cells
 nside = 1024
 bc, ra, dec, vertices = skm.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
 
@@ -84,9 +94,9 @@ skm.setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zo
 skm.setMeridianLabels(ax, proj, meridians, loc="left", fmt=skm.pmDegFormatter)
 skm.setParallelLabels(ax, proj, parallels, loc="bottom")
 
-# add healpix counts from vertices
+# add vertices as polygons
 vmin, vmax = np.percentiles(bc,[10,90])
-fig, ax, poly = skm.plotHealpixPolygons(vertices, proj, ax=ax, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=2, rasterized=True)
+poly = skm.addPolygons(vertices, proj, ax, color=bc, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
 
 # add colorbar
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -107,6 +117,8 @@ The result (with DES SV data) looks like this (taken from [Crocce et al. (2016)]
 ![Density map of benchmark galaxies in DES](examples/depth_map_lss_1024_YlOrRd_4-9_gray.png)
 
 ### Scalar function map with scatter plot
+
+This example explains what happens inside of `plotMap()`, in case you want to modify specific aspects.
 
 If the data is in the form of a scalar function, defined on a regular grid in RA/Dec, there are two options to plot it.
 
