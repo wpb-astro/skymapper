@@ -789,7 +789,7 @@ def plotDensity(ra, dec, nside=1024, sep=5, proj_class=AlbersEqualAreaProjection
     bc, _, _, vertices = getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
 
     # make a map of the vertices
-    poly = makeVertexMap(vertices, bc, proj, ax=ax, sep=sep, cmap="YlOrRd")
+    poly = makeVertexMap(vertices, bc, proj, ax, cmap="YlOrRd")
 
     # create nice map
     cb_label='$n$ [arcmin$^{-2}$]'
@@ -829,7 +829,7 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
     proj = createConicMap(ax, ra, dec, proj_class=proj_class)
 
     # make a map of the vertices
-    poly = makeVertexMap(vertices, m[pixels], proj, ax=ax, sep=sep, cmap=cmap)
+    poly = makeVertexMap(vertices, m[pixels], proj, ax, cmap=cmap)
 
     # create nice map
     makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=poly, cb_label=cb_label)
@@ -838,23 +838,36 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
     return fig, ax, proj
 
 
+def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=AlbersEqualAreaProjection, ax=None, **kwargs):
+    # setup figure
+    fig, ax = createFigureAx(ax=ax)
 
-def plotMap(ra, dec, value, sep=5, cb_label="Healpix value", proj_class=AlbersEqualAreaProjection, cmap="YlOrRd", ax=None):
-    pass
+    # setup map: define map optimal for given RA/Dec
+    proj = createConicMap(ax, ra, dec, proj_class=proj_class)
+
+    # make a map of the ra/dec/value points
+    sc = makeScatterMap(ra, dec, value, proj, ax, **kwargs)
+
+    # create nice map
+    makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=sc, cb_label=cb_label)
+
+    fig.show()
+    return fig, ax, proj
 
 
-def makeVertexMap(vertices, color, proj, ax=None, sep=5, cmap="YlOrRd", cb_label=""):
+def makeVertexMap(vertices, color, proj, ax, cmap="YlOrRd"):
 
     # add healpix counts from vertices
     vmin, vmax = np.percentile(color,[10,90])
     return addPolygons(vertices, proj, ax, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
 
-def makeScatterMap(ra, dec, val, proj, ax=None, sep=5, cb_label="", **kwargs):
-
+def makeScatterMap(ra, dec, val, proj, ax, **kwargs):
     x,y = proj(ra, dec)
     marker = 's'
+    fig = ax.get_figure()
     markersize = getMarkerSizeToFill(fig, ax, x, y)
-    sc = ax.scatter(x, y, c=val, rasterized=True, **kwargs)
+    vmin, vmax = np.percentile(val,[10,90])
+    sc = ax.scatter(x, y, c=val, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, rasterized=True, **kwargs)
 
     return sc
 
