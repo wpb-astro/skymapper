@@ -776,7 +776,7 @@ def plotDensity(ra, dec, nside=1024, sep=5, proj_class=AlbersEqualAreaProjection
         proj_class: constructor of projection class
         ax: matplotlib axes (will be created if not given)
     Returns:
-        figure, axes, matplotlib.collections.PolyCollection
+        figure, axes, projection
     """
 
     # setup figure
@@ -812,7 +812,7 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
         cmap: matplotlib colormap name
         ax: matplotlib axes (will be created if not given)
     Returns:
-        figure, axes, matplotlib.collections.PolyCollection
+        figure, axes, projection
     """
 
     # setup figure
@@ -829,8 +829,10 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
     proj = createConicMap(ax, ra, dec, proj_class=proj_class)
 
     # make a map of the vertices
-    poly = makeVertexMap(vertices, m[pixels], proj, ax, cmap=cmap)
-
+    if use_vertices:
+        poly = makeVertexMap(vertices, m[pixels], proj, ax, cmap=cmap)
+    else:
+        poly = makeScatterMap(ra, dec, m[pixels], proj, ax, cmap=cmap)
     # create nice map
     makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=poly, cb_label=cb_label)
 
@@ -838,7 +840,21 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
     return fig, ax, proj
 
 
-def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=AlbersEqualAreaProjection, ax=None, **kwargs):
+def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=AlbersEqualAreaProjection, cmap="YlOrRd", ax=None):
+    """Plot map values on optimally chosen projection.
+
+    Args:
+        ra: list of rectascensions
+        dec: list of declinations
+        value: list of map values
+        sep: separation of graticules [deg]
+        proj_class: constructor of projection class
+        cmap: matplotlib colormap name
+        ax: matplotlib axes (will be created if not given)
+    Returns:
+        figure, axes, projection
+    """
+
     # setup figure
     fig, ax = createFigureAx(ax=ax)
 
@@ -846,7 +862,7 @@ def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=AlbersEqualA
     proj = createConicMap(ax, ra, dec, proj_class=proj_class)
 
     # make a map of the ra/dec/value points
-    sc = makeScatterMap(ra, dec, value, proj, ax, **kwargs)
+    sc = makeScatterMap(ra, dec, value, proj, ax, cmap=cmap)
 
     # create nice map
     makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=sc, cb_label=cb_label)
@@ -861,13 +877,13 @@ def makeVertexMap(vertices, color, proj, ax, cmap="YlOrRd"):
     vmin, vmax = np.percentile(color,[10,90])
     return addPolygons(vertices, proj, ax, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
 
-def makeScatterMap(ra, dec, val, proj, ax, **kwargs):
+def makeScatterMap(ra, dec, val, proj, ax, cmap="YlOrRd"):
     x,y = proj(ra, dec)
     marker = 's'
     fig = ax.get_figure()
     markersize = getMarkerSizeToFill(fig, ax, x, y)
     vmin, vmax = np.percentile(val,[10,90])
-    sc = ax.scatter(x, y, c=val, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, rasterized=True, **kwargs)
+    sc = ax.scatter(x, y, c=val, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
 
     return sc
 

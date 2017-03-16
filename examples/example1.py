@@ -1,5 +1,4 @@
 # load projection and helper functions
-from __future__ import with_statement
 import numpy as np
 import skymapper as skm
 import matplotlib.pylab as plt
