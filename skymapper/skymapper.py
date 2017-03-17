@@ -540,12 +540,14 @@ def setParallelLabels(ax, proj, parallels, loc="bottom", fmt=degFormatter, **kwa
 
     ax.set_xlim(xlim)
 
-def getOptimalConicProjection(ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, dec0=None):
+def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     """Determine optimal configuration of conic map.
 
     As a simple recommendation, the standard parallels are chosen to be 1/7th
     closer to dec0 than the minimum and maximum declination in the data
     (Snyder 1987, page 99).
+
+    If proj_class is None, it will use AlbersEqualAreaProjection.
 
     Args:
         ra: list of rectascensions
@@ -562,18 +564,22 @@ def getOptimalConicProjection(ra, dec, proj_class=AlbersEqualAreaProjection, ra0
         ra_ = np.array(ra)
         ra_[ra_ > 180] -= 360
         ra_[ra_ < -180] += 360
-        ra0 = np.median(ra_)
+        # weight more towards the poles because that decreases distortions
+        ra0 = (ra_ * dec).sum() / dec.sum()
+
     if dec0 is None:
         dec0 = np.median(dec)
+
     # determine standard parallels for AEA
     dec1, dec2 = dec.min(), dec.max()
     # move standard parallels 1/6 further in from the extremes
     # to minimize scale variations (Snyder 1987, section 14)
     delta_dec = (dec0 - dec1, dec2 - dec0)
-    dec1 += delta_dec[0]/6
-    dec2 -= delta_dec[1]/6
+    dec1 += delta_dec[0]/7
+    dec2 -= delta_dec[1]/7
 
-    # set up AEA map
+    if proj_class is None:
+        proj_class = AlbersEqualAreaProjection
     return proj_class(ra0, dec0, dec1, dec2)
 
 def setupConicAxes(ax, ra, dec, proj, pad=0.02):
@@ -629,7 +635,7 @@ def cloneMap(ax0, ax):
     ax.set_xlim(ax0.get_xlim())
     ax.set_ylim(ax0.get_ylim())
 
-def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
+def createConicMap(ax, ra, dec, proj_class=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
     """Create conic projection and set up axes.
 
     This function constructs a conic projection to optimally hold the
@@ -641,7 +647,7 @@ def createConicMap(ax, ra, dec, proj_class=AlbersEqualAreaProjection, ra0=None, 
         ax: matplotlib axes
         ra: list of rectascensions
         dec: list of declinations
-        proj: a projection instance
+        proj: a projection instance, see getOptimalConicProjection()
         pad: float, how much padding between data and map boundary
         bgcolor: matplotlib color to be used for ax
 
@@ -765,7 +771,7 @@ def createFigureAx(ax=None):
     return fig, ax
 
 
-def plotDensity(ra, dec, nside=1024, sep=5, proj_class=AlbersEqualAreaProjection, ax=None):
+def plotDensity(ra, dec, nside=1024, sep=5, proj_class=None, ax=None):
     """Plot density map on optimally chosen projection.
 
     Args:
@@ -773,7 +779,7 @@ def plotDensity(ra, dec, nside=1024, sep=5, proj_class=AlbersEqualAreaProjection
         dec: list of declinations
         nside: HealPix nside
         sep: separation of graticules [deg]
-        proj_class: constructor of projection class
+        proj_class: constructor of projection class, see getOptimalConicProjection()
         ax: matplotlib axes (will be created if not given)
     Returns:
         figure, axes, projection
@@ -799,7 +805,7 @@ def plotDensity(ra, dec, nside=1024, sep=5, proj_class=AlbersEqualAreaProjection
     return fig, ax, proj
 
 
-def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpix value", proj_class=AlbersEqualAreaProjection, cmap="YlOrRd", ax=None):
+def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpix value", proj_class=None, cmap="YlOrRd", ax=None):
     """Plot HealPix map on optimally chosen projection.
 
     Args:
@@ -808,7 +814,7 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
         nest: HealPix nest
         use_vertices: calculate individual polygons per HealPix cell
         sep: separation of graticules [deg]
-        proj_class: constructor of projection class
+        proj_class: constructor of projection class, see getOptimalConicProjection()
         cmap: matplotlib colormap name
         ax: matplotlib axes (will be created if not given)
     Returns:
@@ -840,7 +846,7 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
     return fig, ax, proj
 
 
-def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=AlbersEqualAreaProjection, cmap="YlOrRd", ax=None):
+def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=None, cmap="YlOrRd", ax=None):
     """Plot map values on optimally chosen projection.
 
     Args:
@@ -848,7 +854,7 @@ def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=AlbersEqualA
         dec: list of declinations
         value: list of map values
         sep: separation of graticules [deg]
-        proj_class: constructor of projection class
+        proj_class: constructor of projection class, see getOptimalConicProjection()
         cmap: matplotlib colormap name
         ax: matplotlib axes (will be created if not given)
     Returns:
