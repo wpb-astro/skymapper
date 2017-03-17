@@ -878,7 +878,6 @@ def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=None, cmap="
 
 
 def makeVertexMap(vertices, color, proj, ax, cmap="YlOrRd"):
-
     # add healpix counts from vertices
     vmin, vmax = np.percentile(color,[10,90])
     return addPolygons(vertices, proj, ax, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
@@ -890,16 +889,14 @@ def makeScatterMap(ra, dec, val, proj, ax, cmap="YlOrRd"):
     markersize = getMarkerSizeToFill(fig, ax, x, y)
     vmin, vmax = np.percentile(val,[10,90])
     sc = ax.scatter(x, y, c=val, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
-
     return sc
 
 def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None, cb_label=""):
-
     # add lines and labels for meridians/parallels
     meridians = np.arange(-90, 90+sep, sep)
     parallels = np.arange(0, 360+sep, sep)
-    setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
-    setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.3, zorder=2)
+    setMeridianPatches(ax, proj, meridians, linestyle='-', lw=0.5, alpha=0.2, zorder=2)
+    setParallelPatches(ax, proj, parallels, linestyle='-', lw=0.5, alpha=0.2, zorder=2)
     setMeridianLabels(ax, proj, meridians, loc="left", fmt=pmDegFormatter)
     if dec.mean() > 0:
         setParallelLabels(ax, proj, parallels, loc="bottom")
@@ -908,7 +905,6 @@ def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None
 
     if bgcolor is not None:
         ax.set_axis_bgcolor(bgcolor)
-
 
     # add colorbar
     if cb_collection is not None:
