@@ -1,6 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+# python 3 compatible
+try:
+    xrange
+except NameError:
+    xrange = range
+
 class ConicProjection(object):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Base class for conic projections.
