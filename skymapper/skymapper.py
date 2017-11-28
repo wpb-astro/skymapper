@@ -854,7 +854,7 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cmap="YlOrRd", b
     return fig, ax, proj
 
 
-def plotMap(ra, dec, value, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Map value", proj_class=None, ax=None):
+def plotMap(ra, dec, value, sep=5, marker="h", markersize=None, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Map value", proj_class=None, ax=None):
     """Plot map values on optimally chosen projection.
 
     Args:
@@ -876,7 +876,7 @@ def plotMap(ra, dec, value, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=Tr
     proj = createConicMap(ax, ra, dec, proj_class=proj_class)
 
     # make a map of the ra/dec/value points
-    sc = makeScatterMap(ra, dec, value, proj, ax, cmap=cmap)
+    sc = makeScatterMap(ra, dec, value, proj, ax, marker=marker, markersize=markersize, cmap=cmap)
 
     # do we want colorbar?
     if not colorbar:
@@ -894,13 +894,13 @@ def makeVertexMap(vertices, color, proj, ax, cmap="YlOrRd"):
     vmin, vmax = np.percentile(color,[10,90])
     return addPolygons(vertices, proj, ax, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
 
-def makeScatterMap(ra, dec, val, proj, ax, cmap="YlOrRd"):
+def makeScatterMap(ra, dec, val, proj, ax, marker="s", markersize=None, cmap="YlOrRd"):
     x,y = proj(ra, dec)
-    marker = 's'
     fig = ax.get_figure()
-    markersize = getMarkerSizeToFill(fig, ax, x, y)
+    if markersize is None:
+        markersize = getMarkerSizeToFill(fig, ax, x, y)
     vmin, vmax = np.percentile(val,[10,90])
-    sc = ax.scatter(x, y, c=val, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
+    sc = ax.scatter(x, y, c=val, marker=marker, s=markersize, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
     return sc
 
 def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None, cb_label=""):
