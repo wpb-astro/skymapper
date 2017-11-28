@@ -771,7 +771,7 @@ def createFigureAx(ax=None):
     return fig, ax
 
 
-def plotDensity(ra, dec, nside=1024, sep=5, proj_class=None, ax=None):
+def plotDensity(ra, dec, nside=1024, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label='$n$ [arcmin$^{-2}$]', proj_class=None, ax=None):
     """Plot density map on optimally chosen projection.
 
     Args:
@@ -795,17 +795,20 @@ def plotDensity(ra, dec, nside=1024, sep=5, proj_class=None, ax=None):
     bc, _, _, vertices = getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
 
     # make a map of the vertices
-    poly = makeVertexMap(vertices, bc, proj, ax, cmap="YlOrRd")
+    poly = makeVertexMap(vertices, bc, proj, ax, cmap=cmap)
+
+    # do we want colorbar?
+    if not colorbar:
+        poly = None
 
     # create nice map
-    cb_label='$n$ [arcmin$^{-2}$]'
-    makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=poly, cb_label=cb_label)
+    makeMapNice(fig, ax, proj, dec, sep=sep, bgcolor=bgcolor, cb_collection=poly, cb_label=cb_label)
 
     fig.show()
     return fig, ax, proj
 
 
-def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpix value", proj_class=None, cmap="YlOrRd", ax=None):
+def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Healpix value", proj_class=None, ax=None):
     """Plot HealPix map on optimally chosen projection.
 
     Args:
@@ -839,14 +842,19 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cb_label="Healpi
         poly = makeVertexMap(vertices, m[pixels], proj, ax, cmap=cmap)
     else:
         poly = makeScatterMap(ra, dec, m[pixels], proj, ax, cmap=cmap)
+
+    # do we want colorbar?
+    if not colorbar:
+        poly = None
+
     # create nice map
-    makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=poly, cb_label=cb_label)
+    makeMapNice(fig, ax, proj, dec, sep=sep, bgcolor=bgcolor, cb_collection=poly, cb_label=cb_label)
 
     fig.show()
     return fig, ax, proj
 
 
-def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=None, cmap="YlOrRd", ax=None):
+def plotMap(ra, dec, value, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Map value", proj_class=None, ax=None):
     """Plot map values on optimally chosen projection.
 
     Args:
@@ -870,8 +878,12 @@ def plotMap(ra, dec, value, sep=5, cb_label="Map value", proj_class=None, cmap="
     # make a map of the ra/dec/value points
     sc = makeScatterMap(ra, dec, value, proj, ax, cmap=cmap)
 
+    # do we want colorbar?
+    if not colorbar:
+        sc = None
+
     # create nice map
-    makeMapNice(fig, ax, proj, dec, sep=sep, cb_collection=sc, cb_label=cb_label)
+    makeMapNice(fig, ax, proj, dec, sep=sep, bgcolor=bgcolor, cb_collection=sc, cb_label=cb_label)
 
     fig.show()
     return fig, ax, proj
@@ -904,7 +916,7 @@ def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None
         setParallelLabels(ax, proj, parallels, loc="top")
 
     if bgcolor is not None:
-        ax.set_axis_bgcolor(bgcolor)
+        ax.set_facecolor(bgcolor)
 
     # add colorbar
     if cb_collection is not None:

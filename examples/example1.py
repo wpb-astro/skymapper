@@ -46,7 +46,6 @@ if __name__ == "__main__":
 
         m = makeHealpixMap(ra, dec, nside=nside)
         fig, ax, proj = skm.plotHealpix(m, nside, sep=sep, ax=ax, cb_label="Healpix cell count")
-
         skm.addFootprint('DES', proj, ax, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
 
         # make free-form map (only works for equal-area projections)
@@ -56,7 +55,6 @@ if __name__ == "__main__":
         pixels = np.flatnonzero(m)
         ra_, dec_ = getHealpixCoords(pixels, nside)
         fig, ax, proj = skm.plotMap(ra_, dec_, m[pixels], sep=sep, ax=ax, cmap='YlOrRd', cb_label="Map value")
-
         skm.addFootprint('DES', proj, ax, zorder=10, edgecolor='#2222B2', facecolor='None', lw=2)
 
     except ImportError:
