@@ -779,6 +779,10 @@ def plotDensity(ra, dec, nside=1024, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", co
         dec: list of declinations
         nside: HealPix nside
         sep: separation of graticules [deg]
+        cmap: colormap name
+        bgcolor: background color of ax
+        colorbar: whether to draw colorbar
+        cb_label: label of colorbar
         proj_class: constructor of projection class, see getOptimalConicProjection()
         ax: matplotlib axes (will be created if not given)
     Returns:
@@ -817,8 +821,11 @@ def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cmap="YlOrRd", b
         nest: HealPix nest
         use_vertices: calculate individual polygons per HealPix cell
         sep: separation of graticules [deg]
+        cmap: colormap name
+        bgcolor: background color of ax
+        colorbar: whether to draw colorbar
+        cb_label: label of colorbar
         proj_class: constructor of projection class, see getOptimalConicProjection()
-        cmap: matplotlib colormap name
         ax: matplotlib axes (will be created if not given)
     Returns:
         figure, axes, projection
@@ -862,8 +869,13 @@ def plotMap(ra, dec, value, sep=5, marker="h", markersize=None, cmap="YlOrRd", b
         dec: list of declinations
         value: list of map values
         sep: separation of graticules [deg]
+        marker: matplotlib marker name (e.g. 's','h','o')
+        markersize: size of marker (in points^2), uses best guess if not set
+        cmap: colormap name
+        bgcolor: background color of ax
+        colorbar: whether to draw colorbar
+        cb_label: label of colorbar
         proj_class: constructor of projection class, see getOptimalConicProjection()
-        cmap: matplotlib colormap name
         ax: matplotlib axes (will be created if not given)
     Returns:
         figure, axes, projection
