@@ -296,7 +296,7 @@ class LambertConformalProjection(ConicProjection):
                 theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
             else:
                 theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
-            return self.ra_0 - theta/self.n, 2 * (np.arctan(self.F/rho)**(1./self.n) - np.pi/2) / self.deg2rad
+            return self.ra_0 - theta/self.n, (2*np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / self.deg2rad
 
     def __repr__(self):
         return "LambertConformalProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
