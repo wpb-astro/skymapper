@@ -7,25 +7,45 @@ try:
 except NameError:
     xrange = range
 
-class ConicProjection(object):
-    def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Base class for conic projections.
+DEG2RAD = np.pi/180
 
-        A conic projection depends on two standard parallels, i.e.
-        intersections of the cone with the sphere.
-        For details, see Snyder (1987, page 97ff).
+class Projection(object):
+
+    def transform(self, ra, dec):
+        """Convert RA/Dec into map coordinates
 
         Args:
-            ra_0: RA that maps onto x = 0
-            dec_0: Dec that maps onto y = 0
-            dec_1: lower standard parallel
-            dec_2: upper standard parallel (must not be -dec_1)
+            ra:  float or array of floats
+            dec: float or array of floats
+
+        Returns:
+            x,y with the same format as ra/dec
         """
-        self.ra_0 = ra_0
-        self.dec_0 = dec_0
-        self.dec_1 = dec_1 # dec1 and dec2 only needed for __repr__
-        self.dec_2 = dec_2
-        self.deg2rad = np.pi/180
+        pass
+
+    def invert(self, x, y):
+        """Convert map coordinates into RA/Dec
+
+        Args:
+            x:  float or array of floats
+            y: float or array of floats
+
+        Returns:
+            RA,Dec with the same format as x/y
+        """
+        pass
+
+    def contains(self, x, y):
+        """Test if x/y is a valid set of map coordinates
+
+        Args:
+            x:  float or array of floats
+            y: float or array of floats
+
+        Returns:
+            Bool array with the same format as x/y
+        """
+        pass
 
     def _wrapRA(self, ra):
         ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
@@ -34,140 +54,8 @@ class ConicProjection(object):
         ra_[ra_ > 180 ] -= 360
         return ra_[0]
 
-    def getMeridianPatches(self, meridians, **kwargs):
-        """Get meridian lines in matplotlib format.
 
-        Meridian lines in conics are circular arcs, appropriate
-        matplotlib.patches will be return
-
-        Args:
-            meridians: list of declinations
-            **kwargs: matplotlib.patches.Arc parameters
-
-        Returns:
-            matplotlib.PatchCollection
-        """
-        from matplotlib.patches import Arc
-        from matplotlib.collections import PatchCollection
-
-        # get opening angle
-        origin = (0, self.rho_0)
-        top_left = self.__call__(self.ra_0 - 180, 90)
-        angle_limit = 180 - np.arctan2(origin[0]-top_left[0], origin[1]-top_left[1])/self.deg2rad
-        angle = 90
-        if self.n < 0:
-            angle = -90
-            angle_limit = 180 - angle_limit
-
-        # get radii
-        _, y = self.__call__(self.ra_0, meridians)
-        radius = np.abs(self.rho_0 - y)
-
-        patches = [Arc(origin, 2*radius[m], 2*radius[m], angle=angle, theta1=-angle_limit, theta2=angle_limit, **kwargs) for m in xrange(len(meridians))]
-        return PatchCollection(patches, match_original=True, zorder=patches[0].zorder)
-
-    def getParallelPatches(self, parallels, **kwargs):
-        """Get parallel lines in matplotlib format.
-
-        Parallel lines in conics are straight, appropriate
-        matplotlib.patches will be returned.
-
-        Args:
-            meridians: list of rectascensions
-            **kwargs: matplotlib.collection.LineCollection parameters
-
-        Returns:
-            matplotlib.LineCollection
-        """
-
-        # remove duplicates
-        parallels_ = np.unique(parallels % 360)
-
-        # the outer boundaries need to be duplicated because the same
-        # parallel appear on the left and the right side of the map
-        if self.ra_0 < 180:
-            outer = self.ra_0 - 180
-        else:
-            outer = self.ra_0 + 180
-        parallels_ = np.array(list(parallels_) + [outer])
-
-        from matplotlib.collections import LineCollection
-        top = self.__call__(parallels_, 90)
-        bottom = self.__call__(parallels_, -90)
-        x_ = np.dstack((top[0], bottom[0]))[0]
-        y_ = np.dstack((top[1], bottom[1]))[0]
-        return LineCollection(np.dstack((x_, y_)), color='k', **kwargs)
-
-    def findIntersectionAtX(self, x, ylim, ra=None, dec=None):
-        """Find intersection of meridian or parallel with a vertical line.
-
-        Args:
-            x: x coordinate of the vertical line
-            ylim: range in y for the vertical line
-            ra: if not None, search for a parallel at this ra to intersect
-            dec: if not None, search for a meridian at this dec to intersect
-
-        Returns:
-            float or None (if not solution was found)
-        """
-        if dec is not None:
-            # analytic solution for intersection of circle with line at x
-            r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
-            if np.abs(x) > np.abs(r):
-                return None
-            if self.rho_0 >= 0:
-                return self.rho_0 - np.sqrt(r**2 - x**2)
-            else:
-                return np.sqrt(r**2 - x**2) + self.rho_0
-        if ra is not None:
-            # analytic solution for intersection of line with line at y
-            top = self.__call__(ra, 90)
-            bottom = self.__call__(ra, -90)
-            delta = (top[0] - bottom[0], top[1] - bottom[1])
-            y = bottom[1] + (x - bottom[0]) * delta[1] / delta[0]
-            if y >= ylim[0] and y <= ylim[1]:
-                return y
-            else:
-                return None
-        raise NotImplementedError("specify either RA or Dec")
-
-    def findIntersectionAtY(self, y, xlim, ra=None, dec=None):
-        """Find intersection of meridian or parallel with a horizontal line.
-
-        Args:
-            y: y coordinate of the horizontal line
-            xlim: range in x for the horizontal line
-            ra: if not None, search for a parallel at this ra to intersect
-            dec: if not None, search for a meridian at this dec to intersect
-
-        Returns:
-            float or None (if not solution was found)
-        """
-        if dec is not None:
-            # analytic solution for intersection of circle with line at y
-            r = np.abs(self.rho_0 - self.__call__(self.ra_0, dec)[1])
-            if np.abs(y) > np.abs(r):
-                return None
-            if self.rho_0 >= 0:
-                return self.rho_0 - np.sqrt(r**2 - y**2)
-            else:
-                return np.sqrt(r**2 - y**2) + self.rho_0
-        if ra is not None:
-            # analytic solution for intersection of line with line at y
-            top = self.__call__(ra, 90)
-            bottom = self.__call__(ra, -90)
-            if y > top[1] or y < bottom[1]:
-                return None
-            delta = (top[0] - bottom[0], top[1] - bottom[1])
-            x = bottom[0] + (y - bottom[1]) * delta[0] / delta[1]
-            if x >= xlim[0] and x <= xlim[1]:
-                return x
-            else:
-                return None
-        raise NotImplementedError("specify either RA or Dec")
-
-
-class AlbersEqualAreaProjection(ConicProjection):
+class AlbersEqualAreaConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Albers Equal-Area projection.
 
@@ -191,47 +79,50 @@ class AlbersEqualAreaProjection(ConicProjection):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be -dec_1)
         """
-        ConicProjection.__init__(self, ra_0, dec_0, dec_1, dec_2)
+        self.ra_0 = ra_0
+        self.dec_0 = dec_0
+        self.dec_1 = dec_1
+        self.dec_2 = dec_2
 
         # Snyder 1987, eq. 14-3 to 14-6.
-        self.n = (np.sin(dec_1 * self.deg2rad) + np.sin(dec_2 * self.deg2rad)) / 2
-        self.C = np.cos(dec_1 * self.deg2rad)**2 + 2 * self.n * np.sin(dec_1 * self.deg2rad)
+        self.n = (np.sin(dec_1 * DEG2RAD) + np.sin(dec_2 * DEG2RAD)) / 2
+        self.C = np.cos(dec_1 * DEG2RAD)**2 + 2 * self.n * np.sin(dec_1 * DEG2RAD)
         self.rho_0 = self._rho(dec_0)
 
     def _rho(self, dec):
-        return np.sqrt(self.C - 2 * self.n * np.sin(dec * self.deg2rad)) / self.n
+        return np.sqrt(self.C - 2 * self.n * np.sin(dec * DEG2RAD)) / self.n
 
-    def __call__(self, ra, dec, inverse=False):
-        """Convert RA/Dec into map coordinates, or the reverse.
+    def transform(self, ra, dec):
+        ra_ = self._wrapRA(ra)
+        # Snyder 1987, eq 14-1 to 14-4
+        theta = self.n * ra_
+        rho = self._rho(dec)
+        return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
-        Args:
-            ra:  float or array of floats
-            dec: float or array of floats
-            inverse: if True, convert from map coordinates to RA/Dec
-
-        Returns:
-            x,y with the same format as ra/dec
-        """
-        if not inverse:
-            ra_ = self._wrapRA(ra)
-            # Snyder 1987, eq 14-1 to 14-4
-            theta = self.n * ra_
-            rho = self._rho(dec)
-            return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
+    def contains(self, x, y):
+        rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
+        inside = np.abs((self.C - (rho * self.n)**2)/(2*self.n)) <= 1
+        if self.n >= 0:
+            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
-            # ra/dec actually x/y
-            # Snyder 1987, eq 14-8 to 14-11
-            rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2)
-            if self.n >= 0:
-                theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
-            else:
-                theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
-            return self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / self.deg2rad
+            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
+        wedge = np.abs(theta) < np.abs(self.n*180)
+        return inside & wedge
+
+    def invert(self, x, y):
+        # ra/dec actually x/y
+        # Snyder 1987, eq 14-8 to 14-11
+        rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
+        if self.n >= 0:
+            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
+        else:
+            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
+        return self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
 
     def __repr__(self):
-        return "AlbersEqualAreaProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+        return "AlbersEqualArea(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
-class LambertConformalProjection(ConicProjection):
+class LambertConformalConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Lambert Conformal conic projection.
 
@@ -255,12 +146,16 @@ class LambertConformalProjection(ConicProjection):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be -dec_1)
         """
-        ConicProjection.__init__(self, ra_0, dec_0, dec_1, dec_2)
+        self.ra_0 = ra_0
+        self.dec_0 = dec_0
+        self.dec_1 = dec_1
+        self.dec_2 = dec_2
+
         # Snyder 1987, eq. 14-1, 14-2 and 15-1 to 15-3.
         self.dec_max = 89.99
 
-        dec_1 *= self.deg2rad
-        dec_2 *= self.deg2rad
+        dec_1 *= DEG2RAD
+        dec_2 *= DEG2RAD
         self.n = np.log(np.cos(dec_1)/np.cos(dec_2)) / \
         (np.log(np.tan(np.pi/4 + dec_2/2)/np.tan(np.pi/4 + dec_1/2)))
         self.F = np.cos(dec_1)*(np.tan(np.pi/4 + dec_1/2)**self.n)/self.n
@@ -271,38 +166,37 @@ class LambertConformalProjection(ConicProjection):
         dec_ = np.array([dec], dtype='f8')
         dec_[dec_ < -self.dec_max] = -self.dec_max
         dec_[dec_ > self.dec_max] = self.dec_max
-        return self.F / np.tan(np.pi/4 + dec_[0]/2 * self.deg2rad)**self.n
+        return self.F / np.tan(np.pi/4 + dec_[0]/2 * DEG2RAD)**self.n
 
-    def __call__(self, ra, dec, inverse=False):
-        """Convert RA/Dec into map coordinates, or the reverse.
+    def transform(self, ra, dec):
+        ra_ = self._wrapRA(ra)
+        theta = self.n * ra_
+        rho = self._rho(dec)
+        return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
-        Args:
-            ra:  float or array of floats
-            dec: float or array of floats
-            inverse: if True, convert from map coordinates to RA/Dec
-
-        Returns:
-            x,y with the same format as ra/dec
-        """
-        if not inverse:
-            ra_ = self._wrapRA(ra)
-            theta = self.n * ra_
-            rho = self._rho(dec)
-            return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
+    def contains(self, x, y):
+        rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
+        inside = np.abs(rho) < max(np.abs(self._rho(self.dec_max)), np.abs(self._rho(-self.dec_max)))
+        if self.n >= 0:
+            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
-            # ra/dec actually x/y
-            rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2) * np.sign(self.n)
-            if self.n >= 0:
-                theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
-            else:
-                theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
-            return self.ra_0 - theta/self.n, 2 * (np.arctan(self.F/rho)**(1./self.n) - np.pi/2) / self.deg2rad
+            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
+        wedge = np.abs(theta) < np.abs(self.n*180)
+        return inside & wedge
+
+    def invert(self, x, y):
+        rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
+        if self.n >= 0:
+            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
+        else:
+            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
+        return self.ra_0 - theta/self.n, (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
 
     def __repr__(self):
-        return "LambertConformalProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+        return "LambertConformal(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 
-class EquidistantProjection(ConicProjection):
+class EquidistantConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Equidistant conic projection.
 
@@ -324,45 +218,81 @@ class EquidistantProjection(ConicProjection):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be +-dec_1)
         """
-        ConicProjection.__init__(self, ra_0, dec_0, dec_1, dec_2)
+        self.ra_0 = ra_0
+        self.dec_0 = dec_0
+        self.dec_1 = dec_1
+        self.dec_2 = dec_2
 
         # Snyder 1987, eq. 14-3 to 14-6.
-        self.n = (np.cos(dec_1 * self.deg2rad) - np.cos(dec_2 * self.deg2rad)) / (dec_2  - dec_1) / self.deg2rad
-        self.G = np.cos(dec_1 * self.deg2rad)/self.n + (dec_1 * self.deg2rad)
+        self.n = (np.cos(dec_1 * DEG2RAD) - np.cos(dec_2 * DEG2RAD)) / (dec_2  - dec_1) / DEG2RAD
+        self.G = np.cos(dec_1 * DEG2RAD)/self.n + (dec_1 * DEG2RAD)
         self.rho_0 = self._rho(dec_0)
 
     def _rho(self, dec):
-        return self.G - (dec * self.deg2rad)
+        return self.G - (dec * DEG2RAD)
 
-    def __call__(self, ra, dec, inverse=False):
-        """Convert RA/Dec into map coordinates, or the reverse.
+    def transform(self, ra, dec):
+        ra_ = self._wrapRA(ra)
+        # Snyder 1987, eq 16-1 to 16-4
+        theta = self.n * ra_
+        rho = self._rho(dec)
+        return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
-        Args:
-            ra:  float or array of floats
-            dec: float or array of floats
-            inverse: if True, convert from map coordinates to RA/Dec
-
-        Returns:
-            x,y with the same format as ra/dec
-        """
-        if not inverse:
-            ra_ = self._wrapRA(ra)
-            # Snyder 1987, eq 16-1 to 16-4
-            theta = self.n * ra_
-            rho = self._rho(dec)
-            return rho*np.sin(theta * self.deg2rad), self.rho_0 - rho*np.cos(theta * self.deg2rad)
+    def contains(self, x, y):
+        rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
+        rho_min = np.abs(self._rho(90))
+        rho_max = np.abs(self._rho(-90))
+        if rho_min > rho_max:
+            rho_min, rho_max = rho_max, rho_min
+        inside = (np.abs(rho) < rho_max) & (np.abs(rho) > rho_min)
+        if self.n >= 0:
+            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
-            # ra/dec actually x/y
-            # Snyder 1987, eq 14-10 to 14-11
-            rho = np.sqrt(ra**2 + (self.rho_0 - dec)**2) * np.sign(self.n)
-            if self.n >= 0:
-                theta = np.arctan2(ra, self.rho_0 - dec) / self.deg2rad
-            else:
-                theta = np.arctan2(-ra, -(self.rho_0 - dec)) / self.deg2rad
-            return self.ra_0 - theta/self.n, (self.G - rho)/ self.deg2rad
+            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
+        wedge = np.abs(theta) < np.abs(self.n*180)
+        return inside & wedge
+
+    def invert(self, x, y):
+        # Snyder 1987, eq 14-10 to 14-11
+        rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
+        if self.n >= 0:
+            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
+        else:
+            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
+        return self.ra_0 - theta/self.n, (self.G - rho)/ DEG2RAD
 
     def __repr__(self):
-        return "EquidistantProjection(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+        return "Equidistant(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+
+class Hammer(Projection):
+    def __init__(self, ra_0):
+        self.ra_0 = ra_0
+
+    def transform(self, ra, dec):
+        ra_ = self._wrapRA(ra)
+        x = 2*np.sqrt(2)*np.cos(dec * DEG2RAD) * np.sin(ra_/2 * DEG2RAD)
+        y = np.sqrt(2)*np.sin(dec * DEG2RAD)
+        denom = np.sqrt(1+ np.cos(dec * DEG2RAD) * np.cos(ra_/2 * DEG2RAD))
+        return x/denom, y/denom
+
+    def invert(self, x, y):
+        inside = self.contains(x,y)
+        ra, dec = np.ma.zeros(x.size), np.ma.zeros(y.size)
+        ra.mask = dec.mask = ~inside
+        dz = x*x/16 + y*y/4
+        z = np.sqrt(1- dz[inside])
+        phi = np.arcsin(z*y[inside]) / DEG2RAD
+        lmbda = 2*np.arctan(z*x[inside] / (2*(2*z*z - 1))) / DEG2RAD
+        ra[inside] = self.ra_0 - lmbda
+        dec[inside] = phi
+        return ra, dec
+
+    def contains(self, x, y):
+        dz = x*x/16 + y*y/4
+        return dz <= 0.5
+
+    def __repr__(self):
+        return "Hammer(%r)" % self.ra_0
 
 ##### Start of free methods #####
 
