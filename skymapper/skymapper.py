@@ -8,6 +8,7 @@ except NameError:
     xrange = range
 
 DEG2RAD = np.pi/180
+resolution = 75
 
 class Projection(object):
 
@@ -294,44 +295,7 @@ class Hammer(Projection):
     def __repr__(self):
         return "Hammer(%r)" % self.ra_0
 
-##### Start of free methods #####
-
-def setMeridianPatches(ax, proj, meridians, **kwargs):
-    """Add meridian lines to matplotlib axes.
-
-    Meridian lines in conics are circular arcs, appropriate
-    matplotlib.patches will be added to given ax.
-
-    Args:
-        ax: matplotlib axes
-        proj: a projection class
-        meridians: list of declinations
-        **kwargs: matplotlib.patches.Arc parameters
-
-    Returns:
-        None
-    """
-    patches = proj.getMeridianPatches(meridians, **kwargs)
-    ax.add_collection(patches)
-
-def setParallelPatches(ax, proj, parallels, **kwargs):
-    """Add parallel lines to matplotlib axes.
-
-    Parallel lines in conics are straight, appropriate
-    matplotlib.patches will be added to given ax.
-
-    Args:
-        ax: matplotlib axes
-        proj: a projection class
-        meridians: list of rectascensions
-        **kwargs: matplotlib.collection.LineCollection parameters
-
-    Returns:
-        None
-    """
-    patches = proj.getParallelPatches(parallels, **kwargs)
-    ax.add_collection(patches)
-
+### Map functions ###
 def degFormatter(deg):
     """Default formatter for map labels.
 
@@ -340,7 +304,7 @@ def degFormatter(deg):
     Returns:
         string
     """
-    return "%d$^\circ$" % deg
+    return "$%d^\circ$" % deg
 
 def pmDegFormatter(deg):
     """String formatter for "+-%d^\circ"
@@ -373,6 +337,228 @@ def hourAngleFormatter(ra):
     minutes = int(float(ra - hours*15)/15 * 60)
     minutes = '{:>02}'.format(minutes)
     return "%d:%sh" % (hours, minutes)
+
+
+class Map():
+    def __init__(self, proj, ax=None, set_edge=True):
+        self.proj = proj
+        self.createFigureAx(ax)
+
+        if set_edge:
+            self.setEdge()
+
+    def createFigureAx(self, ax=None):
+        if ax is None:
+            self.fig = plt.figure()
+            self.ax = self.fig.add_subplot(111, aspect='equal')
+        else:
+            self.ax = ax
+            self.ax.set_aspect('equal')
+            self.fig = self.ax.get_figure()
+        self.ax.set_axis_off()
+
+    @property
+    def parallels(self):
+        import re
+        ps = []
+        for c in self.ax.get_children():
+            if c.get_gid() is not None:
+                match = re.match(r'grid-parallel-([\-\+0-9.]+)', c.get_gid())
+                if match:
+                    ps.append(float(match.group(1)))
+        return ps
+
+    @property
+    def meridians(self):
+        import re
+        ms = []
+        for c in self.ax.get_children():
+            if c.get_gid() is not None:
+                match = re.match(r'grid-meridian-([\-\+0-9.]+)', c.get_gid())
+                if match:
+                    ms.append(float(match.group(1)))
+        return ms
+
+    def setParallel(self, p, ls='-', lw=0.5, c='k', alpha=0.1, zorder=10, **kwargs):
+        x_, y_ = self.proj.transform(self._ra_range, p*np.ones(len(self._ra_range)))
+        self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
+
+    def setMeridian(self, m, ls='-', lw=0.5, c='k', alpha=0.1, zorder=10, **kwargs):
+        x_, y_ = self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range)
+        self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
+
+    def setEdge(self, ls=None, lw=None, c=None, alpha=None, zorder=100, **kwargs):
+        self._dec_range = np.linspace(-90, 90, resolution)
+        self._ra_range = np.linspace(-180, 180, resolution) + self.proj.ra_0
+
+        # edge: static, no labels
+        if ls is None:
+            ls = self.ax.spines['bottom'].get_ls()
+        if lw is None:
+            lw = self.ax.spines['bottom'].get_lw()
+        if c is None:
+            c = self.ax.spines['bottom'].get_edgecolor()
+        if alpha is None:
+            alpha = self.ax.spines['bottom'].get_alpha()
+
+        for p in [-90, 90]:
+            self.setParallel(p, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-parallel', **kwargs)
+        for m in [self.proj.ra_0 + 180, self.proj.ra_0 - 180]:
+            self.setMeridian(m, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-meridian', **kwargs)
+
+    def setGrid(self, sep=15, deg_min=-90, deg_max=90, ra_min=-180, ra_max=180, ls='-', lw=0.5, c='k', alpha=0.1, zorder=10, **kwargs):
+        self._dec_range = np.linspace(deg_min, deg_max, resolution)
+        self._ra_range = np.linspace(ra_min, ra_max, resolution) + self.proj.ra_0
+        parallels = np.arange(-90+sep,90,sep)
+        if self.proj.ra_0 % sep == 0:
+            meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep - 1), -sep)
+        else:
+            meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
+
+        """
+        # clean up previous grid: creates runtime errors...
+        for c in self.ax.get_children():
+            if c.get_gid() is not None and (c.get_gid().find('grid-meridian') != -1 or c.get_gid().find('grid-parallel') != -1):
+                c.remove()
+        """
+
+        for p in parallels:
+            self.setParallel(p, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='grid-parallel-%r' % p, **kwargs)
+        for m in meridians:
+            self.setMeridian(m, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='grid-meridian-%r' % m, **kwargs)
+
+    def _getGrad(self, ra, dec, tangent):
+        assert tangent in ['parallel', 'meridian']
+        if tangent == 'meridian':
+            testm = np.array([ra, ra-1]) # ra in reverse
+            if testm[1] <= self.proj.ra_0 - 180:
+                testm = np.array([ra+1, ra])
+            x_, y_ = self.proj.transform(testm, dec)
+        else:
+            testp = np.array([dec, dec+1])
+            if testp[1] >= 90:
+                testp = np.array([dec-1, dec])
+            x_, y_ = self.proj.transform(ra, testp)
+        return np.array((x_[1] - x_[0], y_[1] - y_[0]))
+
+    def setMeridianLabelAtParallel(self, p, fmt=degFormatter, loc=None, meridians=None, size=None, pad=None, rotation=None, tangent='parallel', zorder=11,  **kwargs):
+
+        if loc is None:
+            if p >= 0:
+                loc = 'top'
+            else:
+                loc = 'bottom'
+        assert loc in ['top', 'bottom']
+
+        import matplotlib
+        if size is None:
+            size = kwargs.get('size', matplotlib.rcParams['font.size'])
+        if pad is None:
+            pad = size / 4
+
+        # determine rot_base so that central label is upright
+        m = self.proj.ra_0
+        dxy = self._getGrad(m, p, tangent)
+        angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
+        options = np.arange(-2,3) * 90 # multiples of 90 deg
+        closest = np.argmin(np.abs(options - angle))
+        rot_base = options[closest]
+
+        # test for best alignedment of the labels
+        ha, va = 'center', 'center'
+        if loc == 'bottom':
+            va = 'top'
+        else:
+            va = 'bottom'
+
+        if meridians is None:
+            meridians = self.meridians
+
+        for m in meridians:
+            xp, yp = self.proj.transform(m, p)
+            dxy = self._getGrad(m, p, "parallel")
+
+            if rotation is None:
+                if tangent != "parallel":
+                    dxy_ = self._getGrad(m, p, tangent)
+                else:
+                    dxy_ = dxy
+                angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+            else:
+                angle = rotation
+
+            dxy *= pad / np.sqrt((dxy**2).sum())
+            if loc == 'bottom':
+                dxy *= -1
+
+            label = m
+            if m < 0:
+                label += 360
+
+            self.ax.annotate(fmt(label), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=ha, verticalalignment=va, size=size, zorder=zorder, gid='meridian-label', **kwargs)
+
+    def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, size=None, pad=None, rotation=None, tangent='meridian', zorder=11, **kwargs):
+
+        if loc is None:
+            if m <= 0:
+                loc = 'right'
+            else:
+                loc = 'left'
+        assert loc in ['left', 'right']
+
+        # set sizes to equal those of axes
+        import matplotlib
+        if size is None:
+            size = kwargs.get('size', matplotlib.rcParams['font.size'])
+        if pad is None:
+            pad = size / 4
+
+        # determine rot_base so that central label is upright
+        p = 0
+        dxy = self._getGrad(m, p, tangent)
+        angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
+        options = np.arange(-2,3) * 90
+        closest = np.argmin(np.abs(options - angle))
+        rot_base = options[closest]
+
+        # test for best alignedment of the labels
+        ha, va = 'center', 'center'
+        if rot_base in [-90, 90]:
+            if loc == 'left':
+                ha = 'right'
+            else:
+                ha = 'left'
+        else:
+            xp, yp = self.proj.transform(m, p)
+            if yp < 0:
+                va = 'top'
+            else:
+                va = 'bottom'
+
+        if parallels is None:
+            parallels = self.parallels
+
+        for p in parallels:
+            xp, yp = self.proj.transform(m, p)
+            dxy = self._getGrad(m, p, tangent)
+            dxy *= pad / np.sqrt((dxy**2).sum())
+
+            if rotation is None:
+                if tangent != "meridian":
+                    dxy_ = self._getGrad(m, p, tangent)
+                else:
+                    dxy_ = dxy
+                angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+            else:
+                angle = rotation
+
+            if loc == 'left':
+                dxy *= -1
+
+            self.ax.annotate(fmt(p), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=ha, verticalalignment=va, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
+
+##### Start of free methods #####
+
 
 def setMeridianLabels(ax, proj, meridians, loc="left", fmt=degFormatter, **kwargs):
     """Add labels for meridians to matplotlib axes.
@@ -703,6 +889,7 @@ def createFigureAx(ax=None):
         fig = plt.figure()
         ax = fig.add_subplot(111, aspect='equal')
     else:
+        ax.set_aspect('equal')
         fig = ax.get_figure()
     return fig, ax
 
