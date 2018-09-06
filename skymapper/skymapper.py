@@ -599,7 +599,7 @@ class Map():
                         # intersect with axis
                         xm, ym = c.get_xdata(), c.get_ydata()
                         xm_at_ylim = extrap(ylim, ym, xm)[pos]
-                        if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1]:
+                        if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.proj.contains(xm_at_ylim, ylim[pos]):
                             m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
                             dxy = self.getGradient(m_, p_, direction="meridian")
                             dxy /= np.sqrt((dxy**2).sum())
@@ -644,19 +644,20 @@ class Map():
                 m_artists = self.getArtists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
                 for c,match in m_artists:
                     p = float(match.group(1))
-                    # intersect with axis
-                    xp, yp = c.get_xdata(), c.get_ydata()
-                    yp_at_xlim = extrap(xlim, xp, yp)[pos]
-                    if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1]:
-                        m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
-                        dxy = self.getGradient(m_, p_, direction='parallel')
-                        dxy /= np.sqrt((dxy**2).sum())
-                        dxy *= pad / dxy[0] # same pad from frame
-                        if loc == "left":
-                            dxy *= -1
-                        angle = 0 # no option along the frame
+                    if p in parallels:
+                        # intersect with axis
+                        xp, yp = c.get_xdata(), c.get_ydata()
+                        yp_at_xlim = extrap(xlim, xp, yp)[pos]
+                        if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.proj.contains(xlim[pos], yp_at_xlim):
+                            m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
+                            dxy = self.getGradient(m_, p_, direction='parallel')
+                            dxy /= np.sqrt((dxy**2).sum())
+                            dxy *= pad / dxy[0] # same pad from frame
+                            if loc == "left":
+                                dxy *= -1
+                            angle = 0 # no option along the frame
 
-                        self.ax.annotate(fmt(p), (xlim[pos], yp_at_xlim), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                            self.ax.annotate(fmt(p), (xlim[pos], yp_at_xlim), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
 
     def setFrame(self, loc=None, precision=1000):
