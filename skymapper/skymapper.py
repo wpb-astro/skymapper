@@ -371,6 +371,12 @@ class Map():
                     ms.append(float(match.group(1)))
         return ms
 
+    def getArtists(self, gid, regex=False):
+        if regex:
+            return [ c for c in self.ax.get_children() if c.get_gid() is not None and re.match(gid, c.get_gid()) ]
+        else: # direct match
+            return [ c for c in self.ax.get_children() if c.get_gid() is not None and c.get_gid() == gid ]
+
     def setParallel(self, p, **kwargs):
         ls = kwargs.pop('ls', '-')
         lw = kwargs.pop('lw', 0.5)
@@ -414,9 +420,9 @@ class Map():
 
         """
         # clean up previous grid: creates runtime errors...
-        for c in self.ax.get_children():
-            if c.get_gid() is not None and (c.get_gid().find('grid-meridian') != -1 or c.get_gid().find('grid-parallel') != -1):
-                c.remove()
+        grid_artists = self.getArtists('grid-meridian', regex=True) + self.getArtists('grid-parallel', regex=True)
+        for artist in grid_artists:
+                artist.remove()
         """
 
         for p in parallels:
@@ -424,9 +430,9 @@ class Map():
         for m in meridians:
             self.setMeridian(m, gid='grid-meridian-%r' % m, **kwargs)
 
-    def _getGrad(self, ra, dec, tangent):
-        assert tangent in ['parallel', 'meridian']
-        if tangent == 'parallel':
+    def getGradient(self, ra, dec, direction='parallel'):
+        assert direction in ['parallel', 'meridian']
+        if direction == 'parallel':
             testm = np.array([ra, ra-1]) # ra in reverse
             if testm[1] <= self.proj.ra_0 - 180:
                 testm = np.array([ra+1, ra])
@@ -448,7 +454,7 @@ class Map():
         if loc == "right":
             return "left"
 
-    def setMeridianLabelAtParallel(self, p, fmt=degFormatter, loc=None, meridians=None, pad=None, tangent='parallel', **kwargs):
+    def setMeridianLabelAtParallel(self, p, fmt=degFormatter, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
 
         if loc is None:
             if p >= 0:
@@ -467,7 +473,7 @@ class Map():
 
         # determine rot_base so that central label is upright
         m = self.proj.ra_0
-        dxy = self._getGrad(m, p, tangent)
+        dxy = self.getGradient(m, p, direction)
         angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
         options = np.arange(-2,3) * 90 # multiples of 90 deg
         closest = np.argmin(np.abs(options - angle))
@@ -478,11 +484,11 @@ class Map():
 
         for m in meridians:
             xp, yp = self.proj.transform(m, p)
-            dxy = self._getGrad(m, p, "parallel")
+            dxy = self.getGradient(m, p, "parallel")
 
             if rotation is None:
-                if tangent != "parallel":
-                    dxy_ = self._getGrad(m, p, tangent)
+                if direction != "parallel":
+                    dxy_ = self.getGradient(m, p, direction)
                 else:
                     dxy_ = dxy
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
@@ -499,7 +505,7 @@ class Map():
 
             self.ax.annotate(fmt(label), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
-    def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, tangent='parallel', **kwargs):
+    def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
 
         if loc is None:
             if m <= 0:
@@ -518,7 +524,7 @@ class Map():
 
         # determine rot_base so that central label is upright
         p = 0
-        dxy = self._getGrad(m, p, tangent)
+        dxy = self.getGradient(m, p, direction)
         angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
         options = np.arange(-2,3) * 90
         closest = np.argmin(np.abs(options - angle))
@@ -529,12 +535,12 @@ class Map():
 
         for p in parallels:
             xp, yp = self.proj.transform(m, p)
-            dxy = self._getGrad(m, p, tangent)
+            dxy = self.getGradient(m, p, direction)
             dxy *= pad / np.sqrt((dxy**2).sum())
 
             if rotation is None:
-                if tangent != "meridian":
-                    dxy_ = self._getGrad(m, p, tangent)
+                if direction != "meridian":
+                    dxy_ = self.getGradient(m, p, direction)
                 else:
                     dxy_ = dxy
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
@@ -545,6 +551,74 @@ class Map():
                 dxy *= -1
 
             self.ax.annotate(fmt(p), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
+
+    def setFrame(self, loc=None, precision=1000):
+        locs = ['left', 'bottom', 'right', 'top']
+        if loc is not None:
+            assert loc in locs
+            locs = [loc]
+
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+
+        for loc in locs:
+            # define line along axis
+            const = np.ones(precision)
+            if loc == "left":
+                line = xlim[0]*const, np.linspace(ylim[0], ylim[1], precision)
+            if loc == "right":
+                line = xlim[1]*const, np.linspace(ylim[0], ylim[1], precision)
+            if loc == "bottom":
+                line = np.linspace(xlim[0], xlim[1], precision), ylim[0]*const
+            if loc == "top":
+                line = np.linspace(xlim[0], xlim[1], precision), ylim[1]*const
+
+            # use styling of spine to mimic axes
+            ls = self.ax.spines[loc].get_ls()
+            lw = self.ax.spines[loc].get_lw()
+            c = self.ax.spines[loc].get_edgecolor()
+            alpha = self.ax.spines[loc].get_alpha()
+
+            # show axis lines only where line is inside of map edge
+            inside = self.proj.contains(*line)
+            if (~inside).all():
+                continue
+
+            if inside.all():
+                startpos, stoppos = 0, -1
+                xmin = (line[0][startpos] - xlim[0])/(xlim[1]-xlim[0])
+                ymin = (line[1][startpos] - ylim[0])/(ylim[1]-ylim[0])
+                xmax = (line[0][stoppos] - xlim[0])/(xlim[1]-xlim[0])
+                ymax = (line[1][stoppos] - ylim[0])/(ylim[1]-ylim[0])
+                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % locs)
+                continue
+
+            # for piecewise inside: determine limits where it's inside
+            # by checking for jumps in inside
+            inside = inside.astype("int")
+            diff = inside[1:] - inside[:-1]
+            jump = np.flatnonzero(diff)
+            start = 0
+            if inside[0]:
+                jump = np.concatenate(((0,),jump))
+
+            while True:
+                startpos = jump[start]
+                if start+1 < len(jump):
+                    stoppos = jump[start + 1]
+                else:
+                    stoppos = -1
+
+                xmin = (line[0][startpos] - xlim[0])/(xlim[1]-xlim[0])
+                ymin = (line[1][startpos] - ylim[0])/(ylim[1]-ylim[0])
+                xmax = (line[0][stoppos] - xlim[0])/(xlim[1]-xlim[0])
+                ymax = (line[1][stoppos] - ylim[0])/(ylim[1]-ylim[0])
+                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % loc)
+                if start + 2 < len(jump):
+                    start += 2
+                else:
+                    break
+
+
 
 ##### Start of free methods #####
 
