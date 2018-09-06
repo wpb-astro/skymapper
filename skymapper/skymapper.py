@@ -278,16 +278,11 @@ class Hammer(Projection):
         return x/denom, y/denom
 
     def invert(self, x, y):
-        inside = self.contains(x,y)
-        ra, dec = np.ma.zeros(x.size), np.ma.zeros(y.size)
-        ra.mask = dec.mask = ~inside
         dz = x*x/16 + y*y/4
-        z = np.sqrt(1- dz[inside])
-        phi = np.arcsin(z*y[inside]) / DEG2RAD
-        lmbda = 2*np.arctan(z*x[inside] / (2*(2*z*z - 1))) / DEG2RAD
-        ra[inside] = self.ra_0 - lmbda
-        dec[inside] = phi
-        return ra, dec
+        z = np.sqrt(1- dz)
+        phi = np.arcsin(z*y) / DEG2RAD
+        lmbda = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
+        return self.ra_0 - lmbda, phi
 
     def contains(self, x, y):
         dz = x*x/16 + y*y/4
