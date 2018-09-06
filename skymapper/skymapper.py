@@ -430,19 +430,29 @@ class Map():
         for m in meridians:
             self.setMeridian(m, gid='grid-meridian-%r' % m, **kwargs)
 
-    def getGradient(self, ra, dec, direction='parallel'):
+    def getGradient(self, ra, dec, sep=1e-2, direction='parallel'):
+        # gradients in *positive* dec and *negative* ra
         assert direction in ['parallel', 'meridian']
+        correction = 1
         if direction == 'parallel':
-            testm = np.array([ra, ra-1]) # ra in reverse
+            testm = np.array([ra+sep/2, ra-sep/2])
+            if testm[0] >= self.proj.ra_0 + 180:
+                testm[0] = ra
+                correction = 2
             if testm[1] <= self.proj.ra_0 - 180:
-                testm = np.array([ra+1, ra])
+                testm[1] = ra
+                correction = 2
             x_, y_ = self.proj.transform(testm, dec)
         else:
-            testp = np.array([dec, dec+1])
+            testp = np.array([dec-sep/2, dec+sep/2])
+            if testp[0] <= -90:
+                testp[0] = dec
+                correction = 2
             if testp[1] >= 90:
-                testp = np.array([dec-1, dec])
+                testp[1] = dec
+                correction = 2
             x_, y_ = self.proj.transform(ra, testp)
-        return np.array((x_[1] - x_[0], y_[1] - y_[0]))
+        return np.array((x_[1] - x_[0], y_[1] - y_[0])) * correction
 
     def _negateLoc(self, loc):
         if loc == "bottom":
@@ -469,41 +479,39 @@ class Map():
         rotation = kwargs.pop('rotation', None)
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         if pad is None:
-            pad = size / 4
+            pad = size / 3
 
         # determine rot_base so that central label is upright
-        m = self.proj.ra_0
-        dxy = self.getGradient(m, p, direction)
-        angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
-        options = np.arange(-2,3) * 90 # multiples of 90 deg
-        closest = np.argmin(np.abs(options - angle))
-        rot_base = options[closest]
+        if rotation is None:
+            m = self.proj.ra_0
+            dxy = self.getGradient(m, p, direction=direction)
+            angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
+            options = np.arange(-2,3) * 90 # multiples of 90 deg
+            closest = np.argmin(np.abs(options - angle))
+            rot_base = options[closest]
 
         if meridians is None:
             meridians = self.meridians
 
         for m in meridians:
+            # move label along meridian
             xp, yp = self.proj.transform(m, p)
-            dxy = self.getGradient(m, p, "parallel")
-
-            if rotation is None:
-                if direction != "parallel":
-                    dxy_ = self.getGradient(m, p, direction)
-                else:
-                    dxy_ = dxy
-                angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
-            else:
-                angle = rotation
-
+            dxy = self.getGradient(m, p, direction="meridian")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if loc == 'bottom':
                 dxy *= -1
+
+            if rotation is None:
+                dxy_ = self.getGradient(m, p, direction=direction)
+                angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+            else:
+                angle = rotation
 
             label = m
             if m < 0:
                 label += 360
 
-            self.ax.annotate(fmt(label), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
+            self.ax.annotate(fmt(label), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
     def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
 
@@ -520,37 +528,35 @@ class Map():
         rotation = kwargs.pop('rotation', None)
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         if pad is None:
-            pad = size / 4
+            pad = size / 3
 
         # determine rot_base so that central label is upright
-        p = 0
-        dxy = self.getGradient(m, p, direction)
-        angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
-        options = np.arange(-2,3) * 90
-        closest = np.argmin(np.abs(options - angle))
-        rot_base = options[closest]
+        if rotation is None:
+            p = 0
+            dxy = self.getGradient(m, p, direction=direction)
+            angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
+            options = np.arange(-2,3) * 90
+            closest = np.argmin(np.abs(options - angle))
+            rot_base = options[closest]
 
         if parallels is None:
             parallels = self.parallels
 
         for p in parallels:
+            # move label along parallel
             xp, yp = self.proj.transform(m, p)
-            dxy = self.getGradient(m, p, direction)
+            dxy = self.getGradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
+            if loc == 'left':
+                dxy *= -1
 
             if rotation is None:
-                if direction != "meridian":
-                    dxy_ = self.getGradient(m, p, direction)
-                else:
-                    dxy_ = dxy
+                dxy_ = self.getGradient(m, p, direction=direction)
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
             else:
                 angle = rotation
 
-            if loc == 'left':
-                dxy *= -1
-
-            self.ax.annotate(fmt(p), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
+            self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
     def setFrame(self, loc=None, precision=1000):
         locs = ['left', 'bottom', 'right', 'top']
