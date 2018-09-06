@@ -512,11 +512,10 @@ class Map():
             else:
                 angle = rotation
 
-            label = m
             if m < 0:
-                label += 360
+                m += 360
 
-            self.ax.annotate(fmt(label), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
+            self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
     def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
 
@@ -608,7 +607,13 @@ class Map():
                                 dxy *= -1
                             angle = 0 # no option along the frame
 
-                            self.ax.annotate(fmt(m), (xm_at_ylim, ylim[pos]), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                            x_im = (xm_at_ylim - xlim[0])/(xlim[1]-xlim[0])
+                            y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
+
+                            if m < 0:
+                                m += 360
+
+                            self.ax.annotate(fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
     def setParallelLabelsAtFrame(self, fmt=degFormatter, loc=None, parallels=None, pad=None, **kwargs):
 
@@ -657,7 +662,9 @@ class Map():
                                 dxy *= -1
                             angle = 0 # no option along the frame
 
-                            self.ax.annotate(fmt(p), (xlim[pos], yp_at_xlim), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                            x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
+                            y_im = (yp_at_xlim - ylim[0])/(ylim[1]-ylim[0])
+                            self.ax.annotate(fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
 
     def setFrame(self, loc=None, precision=1000):
