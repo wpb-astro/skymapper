@@ -426,7 +426,7 @@ class Map():
 
     def _getGrad(self, ra, dec, tangent):
         assert tangent in ['parallel', 'meridian']
-        if tangent == 'meridian':
+        if tangent == 'parallel':
             testm = np.array([ra, ra-1]) # ra in reverse
             if testm[1] <= self.proj.ra_0 - 180:
                 testm = np.array([ra+1, ra])
