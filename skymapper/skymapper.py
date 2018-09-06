@@ -11,6 +11,22 @@ except NameError:
 DEG2RAD = np.pi/180
 resolution = 75
 
+# extrapolation function from
+# http://stackoverflow.com/questions/2745329/how-to-make-scipy-interpolate-give-an-extrapolated-result-beyond-the-input-range
+# improved to order x and y to have ascending x
+def extrap(x, xp, yp):
+    """np.interp function with linear extrapolation"""
+    x_ = np.array(x)
+    order = np.argsort(xp)
+    xp_ = xp[order]
+    yp_ = yp[order]
+
+    y = np.array(np.interp(x_, xp_, yp_))
+    y[x_ < xp_[0]] = yp_[0] + (x_[x_ < xp_[0]] -xp_[0]) * (yp_[0] - yp_[1]) / (xp_[0] - xp_[1])
+    y[x_ > xp_[-1]] = yp_[-1] + (x_[x_ > xp_[-1]] -xp_[-1])*(yp_[-1] - yp_[-2])/(xp_[-1] - xp_[-2])
+    return y
+
+
 class Projection(object):
 
     def transform(self, ra, dec):
@@ -353,27 +369,16 @@ class Map():
 
     @property
     def parallels(self):
-        ps = []
-        for c in self.ax.get_children():
-            if c.get_gid() is not None:
-                match = re.match(r'grid-parallel-([\-\+0-9.]+)', c.get_gid())
-                if match:
-                    ps.append(float(match.group(1)))
-        return ps
+        return [ float(m.group(1)) for c,m in self.getArtists(r'grid-parallel-([\-\+0-9.]+)', regex=True) ]
 
     @property
     def meridians(self):
-        ms = []
-        for c in self.ax.get_children():
-            if c.get_gid() is not None:
-                match = re.match(r'grid-meridian-([\-\+0-9.]+)', c.get_gid())
-                if match:
-                    ms.append(float(match.group(1)))
-        return ms
+        return [ float(m.group(1)) for c,m in self.getArtists(r'grid-meridian-([\-\+0-9.]+)', regex=True) ]
 
     def getArtists(self, gid, regex=False):
         if regex:
-            return [ c for c in self.ax.get_children() if c.get_gid() is not None and re.match(gid, c.get_gid()) ]
+            matches = [ re.match(gid, c.get_gid()) if c.get_gid() is not None else None for c in self.ax.get_children() ]
+            return [ (c,m) for c,m in zip(self.ax.get_children(), matches) if m is not None ]
         else: # direct match
             return [ c for c in self.ax.get_children() if c.get_gid() is not None and c.get_gid() == gid ]
 
@@ -558,6 +563,102 @@ class Map():
 
             self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
+    def setMeridianLabelsAtFrame(self, fmt=degFormatter, loc=None, meridians=None, pad=None, **kwargs):
+
+        locs = ['top', 'bottom']
+        if loc is not None:
+            assert loc in locs
+            locs = [loc]
+
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        horizontalalignment = kwargs.pop('horizontalalignment', 'center')
+        _ = kwargs.pop('verticalalignment', None) # no option along the frame
+        size = kwargs.pop('size', matplotlib.rcParams['font.size'])
+        if pad is None:
+            pad = size / 3
+
+        if meridians is None:
+            meridians = self.meridians
+
+        poss = {"bottom": 0, "top": 1}
+
+        # check if loc has frame
+        frame_artists = self.getArtists(r'frame-([a-zA-Z]+)', regex=True)
+        frame_locs = [match.group(1) for c,match in frame_artists]
+        for loc in locs:
+            pos = poss[loc]
+            zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
+            verticalalignment = self._negateLoc(loc) # no option along the frame
+
+            if loc in frame_locs:
+                # find all parallel grid lines
+                m_artists = self.getArtists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
+                for c,match in m_artists:
+                    m = float(match.group(1))
+                    if m in meridians:
+                        # intersect with axis
+                        xm, ym = c.get_xdata(), c.get_ydata()
+                        xm_at_ylim = extrap(ylim, ym, xm)[pos]
+                        if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1]:
+                            m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
+                            dxy = self.getGradient(m_, p_, direction="meridian")
+                            dxy /= np.sqrt((dxy**2).sum())
+                            dxy *= pad / dxy[1] # same pad from frame
+                            if loc == "bottom":
+                                dxy *= -1
+                            angle = 0 # no option along the frame
+
+                            self.ax.annotate(fmt(m), (xm_at_ylim, ylim[pos]), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+
+    def setParallelLabelsAtFrame(self, fmt=degFormatter, loc=None, parallels=None, pad=None, **kwargs):
+
+        locs = ['left', 'right']
+        if loc is not None:
+            assert loc in locs
+            locs = [loc]
+
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+
+        size = kwargs.pop('size', matplotlib.rcParams['font.size'])
+        verticalalignment = kwargs.pop('verticalalignment', 'center')
+        _ = kwargs.pop('horizontalalignment', None) # no option along the frame
+
+        if pad is None:
+            pad = size / 3
+
+        if parallels is None:
+            parallels = self.parallels
+
+        poss = {"left": 0, "right": 1}
+
+        # check if loc has frame
+        frame_artists = self.getArtists(r'frame-([a-zA-Z]+)', regex=True)
+        frame_locs = [match.group(1) for c,match in frame_artists]
+        for loc in locs:
+            pos = poss[loc]
+            zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
+            horizontalalignment = self._negateLoc(loc) # no option along the frame
+
+            if loc in frame_locs:
+                # find all parallel grid lines
+                m_artists = self.getArtists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
+                for c,match in m_artists:
+                    p = float(match.group(1))
+                    # intersect with axis
+                    xp, yp = c.get_xdata(), c.get_ydata()
+                    yp_at_xlim = extrap(xlim, xp, yp)[pos]
+                    if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1]:
+                        m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
+                        dxy = self.getGradient(m_, p_, direction='parallel')
+                        dxy /= np.sqrt((dxy**2).sum())
+                        dxy *= pad / dxy[0] # same pad from frame
+                        if loc == "left":
+                            dxy *= -1
+                        angle = 0 # no option along the frame
+
+                        self.ax.annotate(fmt(p), (xlim[pos], yp_at_xlim), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+
+
     def setFrame(self, loc=None, precision=1000):
         locs = ['left', 'bottom', 'right', 'top']
         if loc is not None:
@@ -583,6 +684,7 @@ class Map():
             lw = self.ax.spines[loc].get_lw()
             c = self.ax.spines[loc].get_edgecolor()
             alpha = self.ax.spines[loc].get_alpha()
+            zorder = self.ax.spines[loc].get_zorder()
 
             # show axis lines only where line is inside of map edge
             inside = self.proj.contains(*line)
@@ -595,7 +697,7 @@ class Map():
                 ymin = (line[1][startpos] - ylim[0])/(ylim[1]-ylim[0])
                 xmax = (line[0][stoppos] - xlim[0])/(xlim[1]-xlim[0])
                 ymax = (line[1][stoppos] - ylim[0])/(ylim[1]-ylim[0])
-                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % locs)
+                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, zorder=zorder, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % loc)
                 continue
 
             # for piecewise inside: determine limits where it's inside
@@ -618,7 +720,7 @@ class Map():
                 ymin = (line[1][startpos] - ylim[0])/(ylim[1]-ylim[0])
                 xmax = (line[0][stoppos] - xlim[0])/(xlim[1]-xlim[0])
                 ymax = (line[1][stoppos] - ylim[0])/(ylim[1]-ylim[0])
-                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % loc)
+                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, zorder=zorder, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % loc)
                 if start + 2 < len(jump):
                     start += 2
                 else:
@@ -628,108 +730,6 @@ class Map():
 
 ##### Start of free methods #####
 
-
-def setMeridianLabels(ax, proj, meridians, loc="left", fmt=degFormatter, **kwargs):
-    """Add labels for meridians to matplotlib axes.
-
-    Args:
-        ax: matplotlib axes
-        proj: a projection class
-        meridians: list of rectascensions
-        loc: "left" or "right"
-        fmt: string formatter for labels
-        **kwargs: matplotlib tick parameters
-
-    Returns:
-        None
-    """
-
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-
-    if loc == "left":
-        ticks = []
-        labels = []
-        for m in meridians:
-            tick = proj.findIntersectionAtX(xlim[0], ylim, dec=m)
-            if tick is not None:
-                ticks.append(tick)
-                labels.append(fmt(m))
-        ax.set_yticks(ticks)
-        ax.set_yticklabels(labels, **kwargs)
-
-    if loc == "right":
-        ticks = []
-        labels = []
-        for m in meridians:
-            tick = proj.findIntersectionAtX(xlim[1], ylim, dec=m)
-            if tick is not None:
-                ticks.append(tick)
-                labels.append(fmt(m))
-        ax.yaxis.tick_right()
-        ax.yaxis.set_label_position("right")
-        ax.set_yticks(ticks)
-        ax.set_yticklabels(labels, **kwargs)
-
-    ax.set_ylim(ylim)
-
-def setParallelLabels(ax, proj, parallels, loc="bottom", fmt=degFormatter, **kwargs):
-    """Add labels for parallels to matplotlib axes.
-
-    Args:
-        ax: matplotlib axes
-        proj: a projection class
-        parallels: list of declinations
-        loc: "top" or "bottom"
-        fmt: string formatter for labels
-        **kwargs: matplotlib tick parameters
-
-    Returns:
-        None
-    """
-
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-
-    # remove duplicates
-    parallels_ = np.unique(parallels % 360)
-
-    if loc == "bottom":
-        ticks = []
-        labels = []
-        for p in parallels_:
-            p_ = p
-            if p - proj.ra_0 < -180:
-                p_ += 360
-            if p - proj.ra_0 > 180:
-                p_ -= 360
-            tick = proj.findIntersectionAtY(ylim[0], xlim, ra=p_)
-            if tick is not None:
-                ticks.append(tick)
-                labels.append(fmt(p))
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(labels, **kwargs)
-
-    if loc == "top":
-        ticks = []
-        labels = []
-        for p in parallels_:
-            p_ = p
-            # center of map is at ra=ra_0: wrap it around
-            if p - proj.ra_0 < -180:
-                p_ += 360
-            if p - proj.ra_0 > 180:
-                p_ -= 360
-            tick = proj.findIntersectionAtY(ylim[1], xlim, ra=p_)
-            if tick is not None:
-                ticks.append(tick)
-                labels.append(fmt(p))
-        ax.xaxis.tick_top()
-        ax.xaxis.set_label_position("top")
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(labels, **kwargs)
-
-    ax.set_xlim(xlim)
 
 def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     """Determine optimal configuration of conic map.
