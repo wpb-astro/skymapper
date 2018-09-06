@@ -499,7 +499,7 @@ class Map():
 
             self.ax.annotate(fmt(label), (xp, yp), xytext=(xp + dxy[0], yp + dxy[1]), textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
-    def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, tangent='meridian', **kwargs):
+    def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, tangent='parallel', **kwargs):
 
         if loc is None:
             if m <= 0:
