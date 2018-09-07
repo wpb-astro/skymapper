@@ -300,3 +300,75 @@ class Hammer(Projection):
 
     def __repr__(self):
         return "Hammer(%r)" % self.ra_0
+
+class HyperElliptic(Projection):
+    def __init__(self, ra_0, alpha, k, gamma):
+        self.ra_0 = ra_0
+        self.alpha = alpha
+        self.k = k
+        self.gamma = gamma
+
+        self.G = 1 / self.z(1)
+        self.n = 1000
+        m = (1 + 1e-8) * self.G
+        self.approx = [ self.z(i/self.n) * m for i in range(self.n+1) ]
+        self.ratio = 2 * self.Y(1) / np.pi * self.G / self.gamma;
+
+
+    def transform(self, ra, dec):
+        ra_ = self._wrapRA(ra)
+        y = self.Y(np.abs(np.sin(dec * DEG2RAD)))
+        x = self.elliptic(y) * ra_ * DEG2RAD
+        y *= np.sign(dec)/self.ratio
+        if hasattr(x, "__iter__") and not hasattr(y, "__iter__"):
+            y = y*np.ones(len(x))
+
+        return x, y
+
+    def invert(self, x, y):
+        y_ = y*self.ratio
+        dec = np.sign(y_) * np.arcsin(self.z(np.abs(y_)) * self.G) / DEG2RAD
+        return self.ra_0 - x / self.elliptic(np.abs(y_)) / DEG2RAD, dec
+
+    def contains(self, x, y):
+        return np.abs(self.ratio * y) < 1
+
+    def elliptic(self, f):
+        return self.alpha + (1 - self.alpha) * (1 - f**self.k)**(1/self.k)
+
+    def z(self, f):
+        if hasattr(f, "__iter__"):
+            return np.array([self.z(f[i]) for i in range(len(f))])
+
+        import scipy.integrate as integrate
+        result = integrate.quad(self.elliptic, 0, f)
+        return result[0]
+
+    def Y(self, sinphi):
+        if hasattr(sinphi, "__iter__"):
+            return np.array([self.Y(sinphi[i]) for i in range(len(sinphi))])
+
+        rmin, rmax, r = 0, self.n, self.n >> 1
+        while True:
+            if self.approx[r] > sinphi:
+                rmax = r
+            else:
+                rmin = r
+            r = (rmin + rmax) >> 1
+            if r <= rmin:
+                break
+
+        u = self.approx[r + 1] - self.approx[r]
+        if u:
+            u = (sinphi - self.approx[r + 1]) / u
+        return (r + 1 + u) / self.n
+
+class Tobler(HyperElliptic):
+    def __init__(self, ra_0):
+        alpha, k, gamma = 0, 2.5, 1.183136
+        super(Tobler, self).__init__(ra_0, alpha, k, gamma)
+
+class Mollweide(HyperElliptic):
+    def __init__(self, ra_0):
+        alpha, k, gamma = 0, 2, 1.2731
+        super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
