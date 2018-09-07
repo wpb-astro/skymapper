@@ -331,7 +331,8 @@ class HyperElliptic(Projection):
         return self.ra_0 - x / self.elliptic(np.abs(y_)) / DEG2RAD, dec
 
     def contains(self, x, y):
-        return np.abs(self.ratio * y) < 1
+        affine = np.sqrt(2 * self.gamma / np.pi)
+        return np.abs(x / np.sqrt(2*np.pi/self.gamma))**self.k + np.abs(y * affine)**self.k < self.gamma**self.k
 
     def elliptic(self, f):
         return self.alpha + (1 - self.alpha) * (1 - f**self.k)**(1/self.k)
