@@ -9,6 +9,13 @@ except ImportError:
 
 DEG2RAD = np.pi/180
 
+def _toArray(x):
+    if isinstance(x, np.ndarray):
+        return x, True
+    if hasattr(x, '__iter__'):
+        return np.array(x), True
+    return np.array([x]), False
+
 class Projection(object):
     """Projection base class
 
@@ -56,12 +63,14 @@ class Projection(object):
         pass
 
     def _wrapRA(self, ra):
-        ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
+        ra_, isArray = _toArray(ra)
+        ra_ = self.ra_0 - ra_ # inverse for RA
         # check that ra_ is between -180 and 180 deg
         ra_[ra_ < -180 ] += 360
         ra_[ra_ > 180 ] -= 360
+        if isArray:
+            return ra_
         return ra_[0]
-
 
 class AlbersEqualAreaConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -310,48 +319,64 @@ class Hammer(Projection):
         return "Hammer(%r)" % self.ra_0
 
 
-class HyperElliptic(Projection):
+class HyperElliptical(Projection):
 
     def __init__(self, ra_0, alpha, k, gamma):
         self.ra_0 = ra_0
         self.alpha = alpha
         self.k = k
         self.gamma = gamma
+        self.gamma_pow_k = gamma**k
         self.affine = np.sqrt(2 * self.gamma / np.pi)
 
     def transform(self, ra, dec):
-        ra_ = self._wrapRA(ra)
-        y = self.Y(np.sin(np.abs(dec * DEG2RAD)))
-        x = ra_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y))
-        y *= np.sign(dec)
-
-        if hasattr(x, "__iter__") and not hasattr(y, "__iter__"):
-            y = y*np.ones(len(x))
-
-        return x * self.affine, y / self.affine
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        y = self.Y(np.sin(np.abs(dec_ * DEG2RAD)))
+        x = ra_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) * self.affine
+        y *= np.sign(dec_) / self.affine
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
 
     def invert(self, x, y):
-        y_ = y * self.affine
-        sinphi = self.sinPhiDiff(y, 0)
+        y_, isArray = _toArray(y * self.affine)
+        sinphi = self.sinPhiDiff(y_, 0)
         dec = np.sign(y) * np.arcsin(sinphi) / DEG2RAD
-        ra = x / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) / DEG2RAD
-        return  self.ra_0 - ra, dec
+
+        x_, isArray = _toArray(x)
+        ra = x_ / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
+        if isArray:
+            return  self.ra_0 - ra, dec
+        else:
+            return  self.ra_0 - ra[0], dec[0]
 
     def contains(self, x, y):
-        return np.abs(x / self.affine)**self.k + np.abs(y * self.affine)**self.k < self.gamma**self.k
+        return np.abs(x / np.sqrt(2*np.pi/self.gamma))**self.k + np.abs(y * self.affine)**self.k < self.gamma_pow_k
 
     def elliptic(self, y):
         """Returns (gamma^k - y^k)^1/k
         """
-        if hasattr(y, "__iter__"):
-            return np.array([self.elliptic(_) for _ in y])
+        y_,isArray = _toArray(y)
 
-        if y >= self.gamma:
-            return 0.
-        elif y <= 0:
-            return self.gamma
+        f = (self.gamma_pow_k - y_**self.k)**(1/self.k)
+        f[y_ < 0 ] = self.gamma
+        #f[y > self.gamma] = 0
+
+        if isArray:
+            return f
         else:
-            return ((self.gamma**self.k - y**self.k)**(1/self.k))
+            return f[0]
+
+    def elliptic_scalar(self, y):
+        """Returns (gamma^k - y^k)^1/k
+        """
+        # needs to be fast for integrator, hence non-vectorized version
+        if y < 0:
+            return self.gamma
+        return (self.gamma_pow_k - y**self.k)**(1/self.k)
 
     def z(self, y):
         """Returns int_0^y (gamma^k - y_^k)^1/k dy_
@@ -359,8 +384,16 @@ class HyperElliptic(Projection):
         if hasattr(y, "__iter__"):
             return np.array([self.z(_) for _ in y])
 
-        result = scipy.integrate.quad(self.elliptic, 0, y)
-        return result[0]
+        f = scipy.integrate.quad(self.elliptic_scalar, 0, y)[0]
+
+        # check integration errors ofat the limits
+        lim1 = self.gamma * (self.alpha*y - 1) / (self.alpha - 1)
+        lim2 = self.gamma * self.alpha*y / (self.alpha - 1)
+        if f < lim2:
+            return lim2
+        if f > lim1:
+            return lim1
+        return f
 
     def sinPhiDiff(self, y, sinphi):
         return self.alpha*y - (self.alpha - 1) / self.gamma * self.z(y) - sinphi
@@ -369,10 +402,6 @@ class HyperElliptic(Projection):
         if hasattr(sinphi, "__iter__"):
             return np.array([self.Y(_) for _ in sinphi])
 
-        """
-        result = scipy.optimize.minimize_scalar(self.sinPhiDiff, args=(sinphi,), method='Brent', options={'xtol': 1e-4})
-        return result.x
-        """
         y, it, delta = 0.01, 0, 2*eps
         while it < max_iter and np.abs(delta) > eps:
             delta = self.sinPhiDiff(y, sinphi) / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y))
@@ -385,12 +414,16 @@ class HyperElliptic(Projection):
             it += 1
         return y
 
-class Tobler(HyperElliptic):
+class Tobler(HyperElliptical):
+    """Tobler hyperelliptical projection.
+
+    See Snyder (1993, p. 202) for details.
+    """
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
 
-class Mollweide(HyperElliptic):
+class Mollweide(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2, 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)

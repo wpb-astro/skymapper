@@ -176,7 +176,7 @@ class Map():
             if testm[1] <= self.proj.ra_0 - 180:
                 testm[1] = ra
                 correction = 2
-            x_, y_ = self.proj.transform(testm, dec)
+            x_, y_ = self.proj.transform(testm, np.ones(2)*dec)
         else:
             testp = np.array([dec-sep/2, dec+sep/2])
             if testp[0] <= -90:
@@ -185,7 +185,7 @@ class Map():
             if testp[1] >= 90:
                 testp[1] = dec
                 correction = 2
-            x_, y_ = self.proj.transform(ra, testp)
+            x_, y_ = self.proj.transform(np.ones(2)*ra, testp)
         return np.array((x_[1] - x_[0], y_[1] - y_[0])) * correction
 
     def _negateLoc(self, loc):
