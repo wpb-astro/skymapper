@@ -785,28 +785,29 @@ class Map():
         self.fig.canvas.draw()
 
     def _scrollHandler(self, evt):
-        if evt.inaxes != self.ax: return
         # mouse scroll for zoom
-        if evt.step != 0:
-            # show axes, remove frame and labels
-            self.ax.set_axis_on()
-            self.clearFrame()
-            factor = 0.25
-            c = 1 - evt.step*factor # scaling factor
-            xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
-            xdiff, ydiff = xlim[1] - xlim[0], ylim[1] - ylim[0]
+        if evt.inaxes != self.ax: return
+        if evt.step == 0: return
 
-            # scroll to fixed pointer position: google maps style
-            x, y = evt.xdata, evt.ydata
-            fx, fy = (x - xlim[0])/xdiff, (y - ylim[0])/ydiff # axis units
-            xlim_, ylim_ = x - fx*c*xdiff, y - fy*c*ydiff
-            xlim__, ylim__ = xlim_ + c*xdiff, ylim_ + c*ydiff
+        # show axes, remove frame and labels
+        self.ax.set_axis_on()
+        self.clearFrame()
 
-            self.ax.set_xlim(xlim_, xlim__)
-            self.ax.set_ylim(ylim_, ylim__)
-            self.resetFrame()
-            self.ax.set_axis_off()
-            self.fig.canvas.draw()
+        # scroll to fixed pointer position: google maps style
+        factor = 0.25
+        c = 1 - evt.step*factor # scaling factor
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        xdiff, ydiff = xlim[1] - xlim[0], ylim[1] - ylim[0]
+        x, y = evt.xdata, evt.ydata
+        fx, fy = (x - xlim[0])/xdiff, (y - ylim[0])/ydiff # axis units
+        xlim_, ylim_ = x - fx*c*xdiff, y - fy*c*ydiff
+        xlim__, ylim__ = xlim_ + c*xdiff, ylim_ + c*ydiff
+
+        self.ax.set_xlim(xlim_, xlim__)
+        self.ax.set_ylim(ylim_, ylim__)
+        self.resetFrame()
+        self.ax.set_axis_off()
+        self.fig.canvas.draw()
 
     def _releaseHandler(self, evt):
         if evt.button != 1: return
