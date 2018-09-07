@@ -2,7 +2,15 @@ import numpy as np
 DEG2RAD = np.pi/180
 
 class Projection(object):
+    """Projection base class
 
+    Every projection needs to implement three methods:
+    * `transform(self, ra, dec)`: mapping from ra/dec to map x/y
+    * `invert(self, x, y)`: the inverse mapping from x/y to ra/dec
+    * `contains(self, x, y)`: whether x/y is inside of map region
+
+    All three methods accept either single number or arrays and return accordingly.
+    """
     def transform(self, ra, dec):
         """Convert RA/Dec into map coordinates
 
@@ -49,7 +57,7 @@ class Projection(object):
 
 class AlbersEqualAreaConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Albers Equal-Area projection.
+        """Albers Equal-Area projection
 
         AEA is a conic projection with an origin along the lines connecting
         the poles. It preserves relative area, but is not conformal,
@@ -116,7 +124,7 @@ class AlbersEqualAreaConic(Projection):
 
 class LambertConformalConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Lambert Conformal conic projection.
+        """Lambert Conformal conic projection
 
         LCC is a conic projection with an origin along the lines connecting
         the poles. It preserves angles, but is not equal-area,
@@ -190,13 +198,13 @@ class LambertConformalConic(Projection):
 
 class EquidistantConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Equidistant conic projection.
+        """Equidistant conic projection
 
         Equistant conic is a projection with an origin along the lines connecting
         the poles. It preserves distances along the map, but is not conformal,
         perspective or equal-area.
 
-        Its preferred use of for smaller areas with predominant east-west extent
+        Its preferred use is for smaller areas with predominant east-west extent
         at moderate latitudes.
 
         As a conic projection, it depends on two standard parallels, i.e.
@@ -259,6 +267,17 @@ class EquidistantConic(Projection):
 
 class Hammer(Projection):
     def __init__(self, ra_0):
+        """Hammer projection
+
+        Hammer's 2:1 ellipse modification of The Lambert azimuthal equal-area
+        projection.
+
+        Its preferred use is for all-sky maps with an emphasis on low latitudes.
+        It reduces the distortion at the outer meridians and has an elliptical
+        outline. The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1987, section 24).
+        """
         self.ra_0 = ra_0
 
     def transform(self, ra, dec):
