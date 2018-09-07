@@ -1,4 +1,12 @@
 import numpy as np
+
+# only needed for some projections, not enough to make scipy requirement
+try:
+    import scipy.integrate
+    import scipy.optimize
+except ImportError:
+    pass
+
 DEG2RAD = np.pi/180
 
 class Projection(object):
@@ -301,67 +309,81 @@ class Hammer(Projection):
     def __repr__(self):
         return "Hammer(%r)" % self.ra_0
 
+
 class HyperElliptic(Projection):
+
     def __init__(self, ra_0, alpha, k, gamma):
         self.ra_0 = ra_0
         self.alpha = alpha
         self.k = k
         self.gamma = gamma
-
-        self.G = 1 / self.z(1)
-        self.n = 1000
-        m = (1 + 1e-8) * self.G
-        self.approx = [ self.z(i/self.n) * m for i in range(self.n+1) ]
-        self.ratio = 2 * self.Y(1) / np.pi * self.G / self.gamma;
-
+        self.affine = np.sqrt(2 * self.gamma / np.pi)
 
     def transform(self, ra, dec):
         ra_ = self._wrapRA(ra)
-        y = self.Y(np.abs(np.sin(dec * DEG2RAD)))
-        x = self.elliptic(y) * ra_ * DEG2RAD
-        y *= np.sign(dec)/self.ratio
+        y = self.Y(np.sin(np.abs(dec * DEG2RAD)))
+        x = ra_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y))
+        y *= np.sign(dec)
+
         if hasattr(x, "__iter__") and not hasattr(y, "__iter__"):
             y = y*np.ones(len(x))
 
-        return x, y
+        return x * self.affine, y / self.affine
 
     def invert(self, x, y):
-        y_ = y*self.ratio
-        dec = np.sign(y_) * np.arcsin(self.z(np.abs(y_)) * self.G) / DEG2RAD
-        return self.ra_0 - x / self.elliptic(np.abs(y_)) / DEG2RAD, dec
+        y_ = y * self.affine
+        sinphi = self.sinPhiDiff(y, 0)
+        dec = np.sign(y) * np.arcsin(sinphi) / DEG2RAD
+        ra = x / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) / DEG2RAD
+        return  self.ra_0 - ra, dec
 
     def contains(self, x, y):
-        return np.abs(self.ratio * y) < 1
+        return np.abs(x / self.affine)**self.k + np.abs(y * self.affine)**self.k < self.gamma**self.k
 
-    def elliptic(self, f):
-        return self.alpha + (1 - self.alpha) * (1 - f**self.k)**(1/self.k)
+    def elliptic(self, y):
+        """Returns (gamma^k - y^k)^1/k
+        """
+        if hasattr(y, "__iter__"):
+            return np.array([self.elliptic(_) for _ in y])
 
-    def z(self, f):
-        if hasattr(f, "__iter__"):
-            return np.array([self.z(f[i]) for i in range(len(f))])
+        if y >= self.gamma:
+            return 0.
+        elif y <= 0:
+            return self.gamma
+        else:
+            return ((self.gamma**self.k - y**self.k)**(1/self.k))
 
-        import scipy.integrate as integrate
-        result = integrate.quad(self.elliptic, 0, f)
+    def z(self, y):
+        """Returns int_0^y (gamma^k - y_^k)^1/k dy_
+        """
+        if hasattr(y, "__iter__"):
+            return np.array([self.z(_) for _ in y])
+
+        result = scipy.integrate.quad(self.elliptic, 0, y)
         return result[0]
 
-    def Y(self, sinphi):
+    def sinPhiDiff(self, y, sinphi):
+        return self.alpha*y - (self.alpha - 1) / self.gamma * self.z(y) - sinphi
+
+    def Y(self, sinphi, eps=1e-5, max_iter=30):
         if hasattr(sinphi, "__iter__"):
-            return np.array([self.Y(sinphi[i]) for i in range(len(sinphi))])
+            return np.array([self.Y(_) for _ in sinphi])
 
-        rmin, rmax, r = 0, self.n, self.n >> 1
-        while True:
-            if self.approx[r] > sinphi:
-                rmax = r
-            else:
-                rmin = r
-            r = (rmin + rmax) >> 1
-            if r <= rmin:
-                break
+        """
+        result = scipy.optimize.minimize_scalar(self.sinPhiDiff, args=(sinphi,), method='Brent', options={'xtol': 1e-4})
+        return result.x
+        """
+        y, it, delta = 0.01, 0, 2*eps
+        while it < max_iter and np.abs(delta) > eps:
+            delta = self.sinPhiDiff(y, sinphi) / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y))
+            y -= delta
 
-        u = self.approx[r + 1] - self.approx[r]
-        if u:
-            u = (sinphi - self.approx[r + 1]) / u
-        return (r + 1 + u) / self.n
+            if y >= self.gamma:
+                return self.gamma
+            if y <= 0:
+                return 0.
+            it += 1
+        return y
 
 class Tobler(HyperElliptic):
     def __init__(self, ra_0):
