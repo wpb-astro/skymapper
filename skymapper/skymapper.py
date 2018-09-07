@@ -88,10 +88,10 @@ class Map():
         self.ax.yaxis.set_ticks([])
 
         # attach event handlers
-        self._set_frame_args = None
-        self._set_meridianlabelframe_args = None
-        self._set_parallellabelframe_args = None
         if interactive:
+            self._set_frame_args = {}
+            self._set_meridianlabelframe_args = {}
+            self._set_parallellabelframe_args = {}
             self._press_evt = self.fig.canvas.mpl_connect('button_press_event', self._pressHandler)
             self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._releaseHandler)
             self._scroll_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
@@ -487,18 +487,14 @@ class Map():
             artist.remove()
 
     def resetFrame(self):
-        if self._set_frame_args is not None:
-            self.setFrame(**self._set_frame_args)
-        if self._set_meridianlabelframe_args is not None:
-            self.setMeridianLabelsAtFrame(**self._set_meridianlabelframe_args)
-        if self._set_parallellabelframe_args is not None:
-            self.setParallelLabelsAtFrame(**self._set_parallellabelframe_args)
+        self.setFrame(**self._set_frame_args)
+        self.setMeridianLabelsAtFrame(**self._set_meridianlabelframe_args)
+        self.setParallelLabelsAtFrame(**self._set_parallellabelframe_args)
 
     def _pressHandler(self, evt):
         if evt.button != 1: return
         if evt.dblclick: return
-        # show axes, remove frame and labels
-        self.ax.set_axis_on()
+        # remove frame and labels
         self.clearFrame()
         self.fig.canvas.draw()
 
@@ -507,8 +503,7 @@ class Map():
         if evt.inaxes != self.ax: return
         if evt.step == 0: return
 
-        # show axes, remove frame and labels
-        self.ax.set_axis_on()
+        # remove frame and labels
         self.clearFrame()
 
         # scroll to fixed pointer position: google maps style
@@ -524,14 +519,12 @@ class Map():
         self.ax.set_xlim(xlim_, xlim__)
         self.ax.set_ylim(ylim_, ylim__)
         self.resetFrame()
-        self.ax.set_axis_off()
         self.fig.canvas.draw()
 
     def _releaseHandler(self, evt):
         if evt.button != 1: return
         if evt.dblclick: return
         self.resetFrame()
-        self.ax.set_axis_off()
         self.fig.canvas.draw()
 
 
