@@ -352,12 +352,12 @@ def hourAngleFormatter(ra):
 
 
 class Map():
-    def __init__(self, proj, ax=None, **kwargs):
+    def __init__(self, proj, ax=None, interactive=True, **kwargs):
         self.proj = proj
-        self.createFigureAx(ax)
+        self._setFigureAx(ax, interactive=interactive)
         self.setEdge(**kwargs)
 
-    def createFigureAx(self, ax=None):
+    def _setFigureAx(self, ax=None, interactive=True):
         if ax is None:
             self.fig = matplotlib.pyplot.figure()
             self.ax = self.fig.add_subplot(111, aspect='equal')
@@ -366,6 +366,16 @@ class Map():
             self.ax.set_aspect('equal')
             self.fig = self.ax.get_figure()
         self.ax.set_axis_off()
+        self.ax.xaxis.set_ticks([])
+        self.ax.yaxis.set_ticks([])
+
+        # attach event handlers
+        self._set_frame_args = None
+        self._set_meridianlabelframe_args = None
+        self._set_parallellabelframe_args = None
+        if interactive:
+            self._press_evt = self.fig.canvas.mpl_connect('button_press_event', self._press_handler)
+            self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._release_handler)
 
     @property
     def parallels(self):
@@ -380,7 +390,7 @@ class Map():
             matches = [ re.match(gid, c.get_gid()) if c.get_gid() is not None else None for c in self.ax.get_children() ]
             return [ (c,m) for c,m in zip(self.ax.get_children(), matches) if m is not None ]
         else: # direct match
-            return [ c for c in self.ax.get_children() if c.get_gid() is not None and c.get_gid() == gid ]
+            return [ c for c in self.ax.get_children() if c.get_gid() is not None and c.get_gid().find(gid) != -1 ]
 
     def setParallel(self, p, **kwargs):
         ls = kwargs.pop('ls', '-')
@@ -563,6 +573,10 @@ class Map():
             self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
     def setMeridianLabelsAtFrame(self, fmt=degFormatter, loc=None, meridians=None, pad=None, **kwargs):
+        self._set_meridianlabelframe_args = locals()
+        self._set_meridianlabelframe_args.pop('self')
+        for k,v in self._set_meridianlabelframe_args.pop('kwargs'):
+            self._set_meridianlabelframe_args[k]=v
 
         locs = ['top', 'bottom']
         if loc is not None:
@@ -617,6 +631,11 @@ class Map():
 
     def setParallelLabelsAtFrame(self, fmt=degFormatter, loc=None, parallels=None, pad=None, **kwargs):
 
+        self._set_parallellabelframe_args = locals()
+        self._set_parallellabelframe_args.pop('self')
+        for k,v in self._set_parallellabelframe_args.pop('kwargs'):
+            self._set_parallellabelframe_args[k]=v
+
         locs = ['left', 'right']
         if loc is not None:
             assert loc in locs
@@ -668,6 +687,15 @@ class Map():
 
 
     def setFrame(self, loc=None, precision=1000):
+        # remember function arguments to recreate
+        self._set_frame_args = locals()
+        self._set_frame_args.pop('self')
+
+        # clean up existing frame
+        frame_artists = self.getArtists(r'frame-([a-zA-Z]+)', regex=True)
+        for c,m in frame_artists:
+            c.remove()
+
         locs = ['left', 'bottom', 'right', 'top']
         if loc is not None:
             assert loc in locs
@@ -734,6 +762,29 @@ class Map():
                 else:
                     break
 
+    def _press_handler(self, evt):
+        if evt.button != 1: return
+        if evt.dblclick: return
+
+        # show axes, remove frame and labels
+        self.ax.set_axis_on()
+        frame_artists = self.getArtists('frame-')
+        for artist in frame_artists:
+            artist.remove()
+        self.fig.canvas.draw()
+
+    def _release_handler(self, evt):
+        if evt.button != 1: return
+        if evt.dblclick: return
+
+        if self._set_frame_args is not None:
+            self.setFrame(**self._set_frame_args)
+        if self._set_meridianlabelframe_args is not None:
+            self.setMeridianLabelsAtFrame(**self._set_meridianlabelframe_args)
+        if self._set_parallellabelframe_args is not None:
+            self.setParallelLabelsAtFrame(**self._set_parallellabelframe_args)
+        self.ax.set_axis_off()
+        self.fig.canvas.draw()
 
 
 ##### Start of free methods #####
