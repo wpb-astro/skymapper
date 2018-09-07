@@ -375,8 +375,8 @@ class Map():
         self._set_parallellabelframe_args = None
         if interactive:
             self._press_evt = self.fig.canvas.mpl_connect('button_press_event', self._pressHandler)
-            self._press_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
             self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._releaseHandler)
+            self._scroll_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
 
     @property
     def parallels(self):
