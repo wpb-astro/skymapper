@@ -374,8 +374,9 @@ class Map():
         self._set_meridianlabelframe_args = None
         self._set_parallellabelframe_args = None
         if interactive:
-            self._press_evt = self.fig.canvas.mpl_connect('button_press_event', self._press_handler)
-            self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._release_handler)
+            self._press_evt = self.fig.canvas.mpl_connect('button_press_event', self._pressHandler)
+            self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._releaseHandler)
+            self._scroll_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
 
     @property
     def parallels(self):
@@ -762,27 +763,52 @@ class Map():
                 else:
                     break
 
-    def _press_handler(self, evt):
-        if evt.button != 1: return
-        if evt.dblclick: return
-
-        # show axes, remove frame and labels
-        self.ax.set_axis_on()
+    def clearFrame(self):
         frame_artists = self.getArtists('frame-')
         for artist in frame_artists:
             artist.remove()
-        self.fig.canvas.draw()
 
-    def _release_handler(self, evt):
-        if evt.button != 1: return
-        if evt.dblclick: return
-
+    def resetFrame(self):
         if self._set_frame_args is not None:
             self.setFrame(**self._set_frame_args)
         if self._set_meridianlabelframe_args is not None:
             self.setMeridianLabelsAtFrame(**self._set_meridianlabelframe_args)
         if self._set_parallellabelframe_args is not None:
             self.setParallelLabelsAtFrame(**self._set_parallellabelframe_args)
+
+    def _pressHandler(self, evt):
+        if evt.button != 1: return
+        if evt.dblclick: return
+        # show axes, remove frame and labels
+        self.ax.set_axis_on()
+        self.clearFrame()
+        self.fig.canvas.draw()
+
+    def _scrollHandler(self, evt):
+        if evt.button not in ['up', 'down']: return
+        # mouse scroll for zoom
+        if evt.step != 0:
+            # show axes, remove frame and labels
+            self.ax.set_axis_on()
+            self.clearFrame()
+            factor = 0.25
+            xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+            xcenter, xdiff = xlim[0]/2 + xlim[1]/2, xlim[1] - xlim[0]
+            ycenter, ydiff = ylim[0]/2 + ylim[1]/2, ylim[1] - ylim[0]
+            xdiff *= 1+evt.step*factor
+            ydiff *= 1+evt.step*factor
+            xlim = xcenter - xdiff/2, xcenter + xdiff/2
+            ylim = ycenter - ydiff/2, ycenter + ydiff/2
+            self.ax.set_xlim(xlim)
+            self.ax.set_ylim(ylim)
+            self.resetFrame()
+            self.ax.set_axis_off()
+            self.fig.canvas.draw()
+
+    def _releaseHandler(self, evt):
+        if evt.button != 1: return
+        if evt.dblclick: return
+        self.resetFrame()
         self.ax.set_axis_off()
         self.fig.canvas.draw()
 
