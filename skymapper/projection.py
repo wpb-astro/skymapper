@@ -1,5 +1,20 @@
 import numpy as np
+
+# only needed for some projections, not enough to make scipy requirement
+try:
+    import scipy.integrate
+    import scipy.optimize
+except ImportError:
+    pass
+
 DEG2RAD = np.pi/180
+
+def _toArray(x):
+    if isinstance(x, np.ndarray):
+        return x, True
+    if hasattr(x, '__iter__'):
+        return np.array(x), True
+    return np.array([x]), False
 
 class Projection(object):
     """Projection base class
@@ -48,12 +63,14 @@ class Projection(object):
         pass
 
     def _wrapRA(self, ra):
-        ra_ = np.array([ra - self.ra_0]) * -1 # inverse for RA
+        ra_, isArray = _toArray(ra)
+        ra_ = self.ra_0 - ra_ # inverse for RA
         # check that ra_ is between -180 and 180 deg
         ra_[ra_ < -180 ] += 360
         ra_[ra_ > 180 ] -= 360
+        if isArray:
+            return ra_
         return ra_[0]
-
 
 class AlbersEqualAreaConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -301,75 +318,112 @@ class Hammer(Projection):
     def __repr__(self):
         return "Hammer(%r)" % self.ra_0
 
-class HyperElliptic(Projection):
+
+class HyperElliptical(Projection):
+
     def __init__(self, ra_0, alpha, k, gamma):
         self.ra_0 = ra_0
         self.alpha = alpha
         self.k = k
         self.gamma = gamma
-
-        self.G = 1 / self.z(1)
-        self.n = 1000
-        m = (1 + 1e-8) * self.G
-        self.approx = [ self.z(i/self.n) * m for i in range(self.n+1) ]
-        self.ratio = 2 * self.Y(1) / np.pi * self.G / self.gamma;
-
+        self.gamma_pow_k = gamma**k
+        self.affine = np.sqrt(2 * self.gamma / np.pi)
 
     def transform(self, ra, dec):
-        ra_ = self._wrapRA(ra)
-        y = self.Y(np.abs(np.sin(dec * DEG2RAD)))
-        x = self.elliptic(y) * ra_ * DEG2RAD
-        y *= np.sign(dec)/self.ratio
-        if hasattr(x, "__iter__") and not hasattr(y, "__iter__"):
-            y = y*np.ones(len(x))
-
-        return x, y
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        y = self.Y(np.sin(np.abs(dec_ * DEG2RAD)))
+        x = ra_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) * self.affine
+        y *= np.sign(dec_) / self.affine
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
 
     def invert(self, x, y):
-        y_ = y*self.ratio
-        dec = np.sign(y_) * np.arcsin(self.z(np.abs(y_)) * self.G) / DEG2RAD
-        return self.ra_0 - x / self.elliptic(np.abs(y_)) / DEG2RAD, dec
+        y_, isArray = _toArray(y * self.affine)
+        sinphi = self.sinPhiDiff(y_, 0)
+        dec = np.sign(y) * np.arcsin(sinphi) / DEG2RAD
+
+        x_, isArray = _toArray(x)
+        ra = x_ / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
+        if isArray:
+            return  self.ra_0 - ra, dec
+        else:
+            return  self.ra_0 - ra[0], dec[0]
 
     def contains(self, x, y):
-        affine = np.sqrt(2 * self.gamma / np.pi)
-        return np.abs(x / np.sqrt(2*np.pi/self.gamma))**self.k + np.abs(y * affine)**self.k < self.gamma**self.k
+        return np.abs(x / np.sqrt(2*np.pi/self.gamma))**self.k + np.abs(y * self.affine)**self.k < self.gamma_pow_k
 
-    def elliptic(self, f):
-        return self.alpha + (1 - self.alpha) * (1 - f**self.k)**(1/self.k)
+    def elliptic(self, y):
+        """Returns (gamma^k - y^k)^1/k
+        """
+        y_,isArray = _toArray(y)
 
-    def z(self, f):
-        if hasattr(f, "__iter__"):
-            return np.array([self.z(f[i]) for i in range(len(f))])
+        f = (self.gamma_pow_k - y_**self.k)**(1/self.k)
+        f[y_ < 0 ] = self.gamma
+        #f[y > self.gamma] = 0
 
-        import scipy.integrate as integrate
-        result = integrate.quad(self.elliptic, 0, f)
-        return result[0]
+        if isArray:
+            return f
+        else:
+            return f[0]
 
-    def Y(self, sinphi):
+    def elliptic_scalar(self, y):
+        """Returns (gamma^k - y^k)^1/k
+        """
+        # needs to be fast for integrator, hence non-vectorized version
+        if y < 0:
+            return self.gamma
+        return (self.gamma_pow_k - y**self.k)**(1/self.k)
+
+    def z(self, y):
+        """Returns int_0^y (gamma^k - y_^k)^1/k dy_
+        """
+        if hasattr(y, "__iter__"):
+            return np.array([self.z(_) for _ in y])
+
+        f = scipy.integrate.quad(self.elliptic_scalar, 0, y)[0]
+
+        # check integration errors ofat the limits
+        lim1 = self.gamma * (self.alpha*y - 1) / (self.alpha - 1)
+        lim2 = self.gamma * self.alpha*y / (self.alpha - 1)
+        if f < lim2:
+            return lim2
+        if f > lim1:
+            return lim1
+        return f
+
+    def sinPhiDiff(self, y, sinphi):
+        return self.alpha*y - (self.alpha - 1) / self.gamma * self.z(y) - sinphi
+
+    def Y(self, sinphi, eps=1e-5, max_iter=30):
         if hasattr(sinphi, "__iter__"):
-            return np.array([self.Y(sinphi[i]) for i in range(len(sinphi))])
+            return np.array([self.Y(_) for _ in sinphi])
 
-        rmin, rmax, r = 0, self.n, self.n >> 1
-        while True:
-            if self.approx[r] > sinphi:
-                rmax = r
-            else:
-                rmin = r
-            r = (rmin + rmax) >> 1
-            if r <= rmin:
-                break
+        y, it, delta = 0.01, 0, 2*eps
+        while it < max_iter and np.abs(delta) > eps:
+            delta = self.sinPhiDiff(y, sinphi) / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y))
+            y -= delta
 
-        u = self.approx[r + 1] - self.approx[r]
-        if u:
-            u = (sinphi - self.approx[r + 1]) / u
-        return (r + 1 + u) / self.n
+            if y >= self.gamma:
+                return self.gamma
+            if y <= 0:
+                return 0.
+            it += 1
+        return y
 
-class Tobler(HyperElliptic):
+class Tobler(HyperElliptical):
+    """Tobler hyperelliptical projection.
+
+    See Snyder (1993, p. 202) for details.
+    """
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
 
-class Mollweide(HyperElliptic):
+class Mollweide(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2, 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
