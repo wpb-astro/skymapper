@@ -550,7 +550,15 @@ class Map():
             xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
             per_sample_volume = (xlim[1]-xlim[0])**2 / x.size * 10
             gridsize = int(np.ceil((xlim[1]-xlim[0]) / np.sqrt(per_sample_volume)))
-        return self.ax.hexbin(x, y, C=C, gridsize=gridsize, mincnt=mincnt, **kwargs)
+
+        # styling: use same default colormap as density for histogram
+        if C is None:
+            cmap = kwargs.pop("cmap", "YlOrRd")
+        else:
+            cmap = kwargs.pop("cmap", "None")
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+
+        return self.ax.hexbin(x, y, C=C, gridsize=gridsize, mincnt=mincnt, cmap=cmap, zorder=zorder, **kwargs)
 
     def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
         x, y = self.proj.transform(ra, dec)
@@ -596,10 +604,12 @@ class Map():
         Returns:
             matplotlib.collections.PolyCollection
         """
-        from matplotlib.collections import PolyCollection
         vertices_ = np.empty_like(vertices)
         vertices_[:,:,0], vertices_[:,:,1] = self.proj.transform(vertices[:,:,0], vertices[:,:,1])
-        coll = PolyCollection(vertices_, array=color, **kwargs)
+
+        from matplotlib.collections import PolyCollection
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        coll = PolyCollection(vertices_, array=color, zorder=zorder, **kwargs)
         coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
         self.ax.add_collection(coll)
@@ -623,6 +633,7 @@ class Map():
         cmap = kwargs.pop("cmap", "YlOrRd")
         vmin = kwargs.pop("vmin", None)
         vmax = kwargs.pop("vmax", None)
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         if vmin is None or vmax is None:
             vlim = np.percentile(color, color_percentiles)
             if vmin is None:
@@ -631,7 +642,7 @@ class Map():
                 vmax = vlim[1]
 
         # make a map of the vertices
-        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, **kwargs)
 
     def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
         """Plot sample density using healpix binning
@@ -650,6 +661,7 @@ class Map():
         cmap = kwargs.pop("cmap", "YlOrRd")
         vmin = kwargs.pop("vmin", None)
         vmax = kwargs.pop("vmax", None)
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         if vmin is None or vmax is None:
             vlim = np.percentile(color, color_percentiles)
             if vmin is None:
@@ -658,7 +670,7 @@ class Map():
                 vmax = vlim[1]
 
         # make a map of the vertices
-        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, **kwargs)
 
     def interpolate(self, ra, dec, value, **kwargs):
         """Interpolate ra,dec samples over covered region in the map
@@ -686,7 +698,8 @@ class Map():
         # remember axes limits ...
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         _ = kwargs.pop('extend', None)
-        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), **kwargs)
+        zorder = kwargs.pop("zorder", 0) # default for imshow: underneath everything
+        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
         # ... because imshow focusses on extent
         self.ax.set_xlim(xlim_)
         self.ax.set_ylim(ylim_)
@@ -704,8 +717,8 @@ class Map():
             resolution: number of evaluated cells per linear map dimension
             **kwargs: arguments for matplotlib.imshow
         """
-
         x, y = self.proj.transform(ra, dec)
+
         # TODO: get limits of the map from all x/y data of the edge artists:
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
         xline = np.linspace(xlim[0], xlim[1], resolution)
@@ -713,10 +726,12 @@ class Map():
         xp, yp = np.meshgrid(xline, yline)
         inside = self.proj.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
+
         from scipy.interpolate import Rbf
         rbfi = Rbf(x, y, value)
         vp[inside] = rbfi(xp[inside], yp[inside])
-        return self.ax.imshow(vp, **kwargs, extent=(xlim[0], xlim[1], ylim[0], ylim[1]))
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        return self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
 
 
 ##### Start of free methods #####
