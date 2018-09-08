@@ -4,13 +4,9 @@ import re
 from . import healpix
 
 # decorator for registering the survey footprint loader functions
-footprint_loader = {}
-
-def register(surveyname=""):
-    def decorate(func):
-        footprint_loader[surveyname] = func
-        return func
-    return decorate
+survey_register = {}
+def register_survey(cls):
+    survey_register[cls.__name__] = cls
 
 DEG2RAD = np.pi/180
 resolution = 75
@@ -595,7 +591,9 @@ class Map():
             surveyname: name of the survey
             **kwargs: matplotlib.collections.PolyCollection keywords
         """
-        ra, dec = footprint_loader[surveyname]()
+        # construct survey loader class and call it
+        ra, dec = survey_register[surveyname].load()
+        
         x,y  = self.proj.transform(ra, dec)
         from matplotlib.patches import Polygon
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
