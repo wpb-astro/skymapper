@@ -143,8 +143,8 @@ class Map():
         for m in [self.proj.ra_0 + 180, self.proj.ra_0 - 180]:
             self.setMeridian(m, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-meridian', **kwargs)
 
-    def setGrid(self, sep=15, deg_min=-90, deg_max=90, ra_min=-180, ra_max=180, **kwargs):
-        self._dec_range = np.linspace(deg_min, deg_max, resolution)
+    def setGrid(self, sep=15, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+        self._dec_range = np.linspace(dec_min, dec_max, resolution)
         self._ra_range = np.linspace(ra_min, ra_max, resolution) + self.proj.ra_0
         parallels = np.arange(-90+sep,90,sep)
         if self.proj.ra_0 % sep == 0:
@@ -152,12 +152,10 @@ class Map():
         else:
             meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
 
-        """
         # clean up previous grid: creates runtime errors...
-        grid_artists = self.getArtists('grid-meridian', regex=True) + self.getArtists('grid-parallel', regex=True)
+        grid_artists = self.getArtists('grid-meridian') + self.getArtists('grid-parallel')
         for artist in grid_artists:
                 artist.remove()
-        """
 
         for p in parallels:
             self.setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
