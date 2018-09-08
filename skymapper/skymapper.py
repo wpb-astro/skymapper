@@ -143,23 +143,25 @@ class Map():
         for m in [self.proj.ra_0 + 180, self.proj.ra_0 - 180]:
             self._setMeridian(m, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-meridian', **kwargs)
 
-    def grid(self, sep=30, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+    def grid(self, sep=30, parallel_fmt=pmDegFormatter, meridian_fmt=degFormatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+        self.parallel_fmt = parallel_fmt
+        self.meridian_fmt = meridian_fmt
         self._dec_range = np.linspace(dec_min, dec_max, resolution)
         self._ra_range = np.linspace(ra_min, ra_max, resolution) + self.proj.ra_0
-        parallels = np.arange(-90+sep,90,sep)
+        _parallels = np.arange(-90+sep,90,sep)
         if self.proj.ra_0 % sep == 0:
-            meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep - 1), -sep)
+            _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep - 1), -sep)
         else:
-            meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
+            _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
 
         # clean up previous grid: creates runtime errors...
         grid_artists = self.artists('grid-meridian') + self.artists('grid-parallel')
         for artist in grid_artists:
                 artist.remove()
 
-        for p in parallels:
+        for p in _parallels:
             self._setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
-        for m in meridians:
+        for m in _meridians:
             self._setMeridian(m, gid='grid-meridian-%r' % m, **kwargs)
 
     def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
@@ -196,7 +198,7 @@ class Map():
         if loc == "right":
             return "left"
 
-    def labelMeridianAtParallel(self, p, fmt=degFormatter, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+    def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
 
         if loc is None:
             if p >= 0:
@@ -242,9 +244,9 @@ class Map():
             if m < 0:
                 m += 360
 
-            self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
+            self.ax.annotate(self.meridian_fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
-    def labelParallelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+    def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
 
         if loc is None:
             if m <= 0:
@@ -287,9 +289,9 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
+            self.ax.annotate(self.parallel_fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
-    def labelMeridiansAtFrame(self, fmt=degFormatter, loc=None, meridians=None, pad=None, **kwargs):
+    def labelMeridiansAtFrame(self, loc=None, meridians=None, pad=None, **kwargs):
         self._set_meridianlabelframe_args = locals()
         self._set_meridianlabelframe_args.pop('self')
         for k,v in self._set_meridianlabelframe_args.pop('kwargs'):
@@ -344,9 +346,9 @@ class Map():
                             if m < 0:
                                 m += 360
 
-                            self.ax.annotate(fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                            self.ax.annotate(self.meridian_fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
-    def labelParallelsAtFrame(self, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, **kwargs):
+    def labelParallelsAtFrame(self, loc=None, parallels=None, pad=None, **kwargs):
 
         self._set_parallellabelframe_args = locals()
         self._set_parallellabelframe_args.pop('self')
@@ -400,7 +402,7 @@ class Map():
 
                             x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
                             y_im = (yp_at_xlim - ylim[0])/(ylim[1]-ylim[0])
-                            self.ax.annotate(fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                            self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
 
     def _setFrame(self, precision=1000):
