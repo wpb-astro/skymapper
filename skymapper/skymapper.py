@@ -2,6 +2,15 @@ import matplotlib
 import numpy as np
 import re
 
+# decorator for registering the survey footprint loader functions
+footprint_loader = {}
+
+def register(surveyname=""):
+    def decorate(func):
+        footprint_loader[surveyname] = func
+        return func
+    return decorate
+
 # python 3 compatible
 try:
     xrange
@@ -163,7 +172,7 @@ class Map():
         artists = self.artists('meridian-label') + self.artists('parallel-label')
         for artist in artists:
                 artist.remove()
-                
+
         for p in _parallels:
             self._setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
         for m in _meridians:
@@ -528,7 +537,40 @@ class Map():
         self._resetFrame()
         self.fig.canvas.draw()
 
+    #### common plot type for maps: follow mpl convention ####
+    def plot(self, ra, dec, *args, **kwargs):
+        x, y = self.proj.transform(ra, dec)
+        self.ax.plot(x, y, *args, **kwargs)
 
+    def scatter(self, ra, dec, **kwargs):
+        x, y = self.proj.transform(ra, dec)
+        self.ax.scatter(x, y, **kwargs)
+
+    def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
+        x, y = self.proj.transform(ra, dec)
+
+        if rotation is None:
+            dxy_ = self.gradient(ra, dec, direction=direction)
+            angle = 90-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+        else:
+            angle = rotation
+
+        self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", **kwargs)
+
+    #### special plot types for maps ####
+    def footprint(self, surveyname, **kwargs):
+        """Plot survey footprint polygon onto map.
+
+        Args:
+            surveyname: name of the survey
+            **kwargs: matplotlib.collections.PolyCollection keywords
+        """
+
+        ra, dec = footprint_loader[surveyname]()
+        x,y  = self.proj.transform(ra, dec)
+        from matplotlib.patches import Polygon
+        poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
+        self.ax.add_artist(poly)
 
 ##### Start of free methods #####
 
@@ -922,42 +964,6 @@ def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None
         cb.set_label(cb_label)
         cb.solids.set_edgecolor("face")
     fig.tight_layout()
-
-
-# decorator for registering the survey footprint loader functions
-footprint_loader = {}
-
-def register(surveyname=""):
-    def decorate(func):
-        footprint_loader[surveyname] = func
-        return func
-    return decorate
-
-
-def addFootprint(surveyname, proj, ax, **kwargs):
-    """Plot survey footprint polygon onto map.
-
-    Args:
-        surveyname: name of the survey
-        proj: map projection
-        ax: matplotlib axes
-        **kwargs: matplotlib.collections.PolyCollection keywords
-    Returns:
-        figure, axes, matplotlib.collections.PolyCollection
-    """
-
-    # setup figure
-    if ax is None:
-        fig, ax = createFigureAx()
-    else:
-        fig = ax.get_figure()
-
-    ra, dec = footprint_loader[surveyname]()
-    x,y  = proj(ra, dec)
-    from matplotlib.patches import Polygon
-    poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
-    ax.add_artist(poly)
-    return fig, ax, poly
 
 
 def addPolygons(vertices, proj, ax, color=None, vmin=None, vmax=None, **kwargs):
