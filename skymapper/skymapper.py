@@ -541,6 +541,17 @@ class Map():
         x, y = self.proj.transform(ra, dec)
         return self.ax.scatter(x, y, **kwargs)
 
+    def hexbin(self, ra, dec, C=None, **kwargs):
+        x, y = self.proj.transform(ra, dec)
+        # determine proper gridsize: by default x is only needed, y is chosen accordingly
+        gridsize = kwargs.pop("gridsize", None)
+        mincnt = kwargs.pop("mincnt", 1)
+        if gridsize is None:
+            xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
+            per_sample_volume = (xlim[1]-xlim[0])**2 / x.size * 10
+            gridsize = int(np.ceil((xlim[1]-xlim[0]) / np.sqrt(per_sample_volume)))
+        return self.ax.hexbin(x, y, C=C, gridsize=gridsize, mincnt=mincnt, **kwargs)
+
     def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
         x, y = self.proj.transform(ra, dec)
 
@@ -550,7 +561,7 @@ class Map():
         else:
             angle = rotation
 
-        return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", **kwargs)
+        return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", clip_on=True, **kwargs)
 
     def show(self, *args, **kwargs):
         self.fig.show(*args, **kwargs)
@@ -560,13 +571,12 @@ class Map():
 
     #### special plot types for maps ####
     def footprint(self, surveyname, **kwargs):
-        """Plot survey footprint polygon onto map.
+        """Plot survey footprint polygon onto map
 
         Args:
             surveyname: name of the survey
             **kwargs: matplotlib.collections.PolyCollection keywords
         """
-
         ra, dec = footprint_loader[surveyname]()
         x,y  = self.proj.transform(ra, dec)
         from matplotlib.patches import Polygon
@@ -603,7 +613,6 @@ class Map():
             nest: HealPix nest
             color_percentiles: lower and higher cutoff percentile for map coloring
         """
-
         # determine ra, dec of map; restrict to non-empty cells
         pixels = np.flatnonzero(m)
         nside = healpix.hp.npix2nside(m.size)
@@ -625,7 +634,7 @@ class Map():
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
     def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
-        """Plot density map using healpix binning
+        """Plot sample density using healpix binning
 
         Args:
             ra: list of rectascensions
@@ -650,6 +659,64 @@ class Map():
 
         # make a map of the vertices
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+
+    def interpolate(self, ra, dec, value, **kwargs):
+        """Interpolate ra,dec samples over covered region in the map
+
+        Requires scipy, uses `scipy.interpolate.griddata` with `method='cubic'`.
+
+        Args:
+            ra: list of rectascensions
+            dec: list of declinations
+            value: list of sample values
+            **kwargs: arguments for matplotlib.imshow
+        """
+        x, y = self.proj.transform(ra, dec)
+
+        # evaluate interpolator over the range covered by data
+        xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
+        per_sample_volume = min(xlim[1]-xlim[0], ylim[1]-ylim[0])**2 / x.size
+        delta = np.sqrt(per_sample_volume)
+        xline = np.arange(xlim[0]-delta/2, xlim[1]+delta/2, delta)
+        yline = np.arange(ylim[0]-delta/2, ylim[1]+delta/2, delta)
+        xp, yp = np.meshgrid(xline, yline)
+
+        from scipy.interpolate import griddata
+        vp = griddata(np.dstack((x,y))[0], value, (xp,yp), method='cubic')
+        # remember axes limits ...
+        xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
+        _ = kwargs.pop('extend', None)
+        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), **kwargs)
+        # ... because imshow focusses on extent
+        self.ax.set_xlim(xlim_)
+        self.ax.set_ylim(ylim_)
+        return artist
+
+    def extrapolate(self, ra, dec, value, resolution=300, **kwargs):
+        """Extrapolate ra,dec samples over entire map
+
+        Requires scipy, uses default `scipy.interpolate.Rbf`.
+
+        Args:
+            ra: list of rectascensions
+            dec: list of declinations
+            value: list of sample values
+            resolution: number of evaluated cells per linear map dimension
+            **kwargs: arguments for matplotlib.imshow
+        """
+
+        x, y = self.proj.transform(ra, dec)
+        # TODO: get limits of the map from all x/y data of the edge artists:
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        xline = np.linspace(xlim[0], xlim[1], resolution)
+        yline = np.linspace(ylim[0], ylim[1], resolution)
+        xp, yp = np.meshgrid(xline, yline)
+        inside = self.proj.contains(xp,yp)
+        vp = np.ma.array(np.empty(xp.shape), mask=~inside)
+        from scipy.interpolate import Rbf
+        rbfi = Rbf(x, y, value)
+        vp[inside] = rbfi(xp[inside], yp[inside])
+        return self.ax.imshow(vp, **kwargs, extent=(xlim[0], xlim[1], ylim[0], ylim[1]))
 
 
 ##### Start of free methods #####
@@ -753,47 +820,6 @@ def createConicMap(ax, ra, dec, proj_class=None, ra0=None, dec0=None, pad=0.02, 
     return proj
 
 
-def plotMap(ra, dec, value, sep=5, marker="h", markersize=None, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Map value", proj_class=None, ax=None):
-    """Plot map values on optimally chosen projection.
-
-    Args:
-        ra: list of rectascensions
-        dec: list of declinations
-        value: list of map values
-        sep: separation of graticules [deg]
-        marker: matplotlib marker name (e.g. 's','h','o')
-        markersize: size of marker (in points^2), uses best guess if not set
-        cmap: colormap name
-        bgcolor: background color of ax
-        colorbar: whether to draw colorbar
-        cb_label: label of colorbar
-        proj_class: constructor of projection class, see getOptimalConicProjection()
-        ax: matplotlib axes (will be created if not given)
-    Returns:
-        figure, axes, projection
-    """
-
-    # setup figure
-    fig, ax = createFigureAx(ax=ax)
-
-    # setup map: define map optimal for given RA/Dec
-    proj = createConicMap(ax, ra, dec, proj_class=proj_class)
-
-    # make a map of the ra/dec/value points
-    sc = makeScatterMap(ra, dec, value, proj, ax, marker=marker, markersize=markersize, cmap=cmap)
-
-    # do we want colorbar?
-    if not colorbar:
-        sc = None
-
-    # create nice map
-    makeMapNice(fig, ax, proj, dec, sep=sep, bgcolor=bgcolor, cb_collection=sc, cb_label=cb_label)
-
-    fig.show()
-    return fig, ax, proj
-
-
-
 def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None, cb_label=""):
     # add lines and labels for meridians/parallels
     meridians = np.arange(-90, 90+sep, sep)
@@ -818,42 +844,3 @@ def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None
         cb.set_label(cb_label)
         cb.solids.set_edgecolor("face")
     fig.tight_layout()
-
-
-
-
-def getMarkerSizeToFill(fig, ax, x, y):
-    """Get the size of a marker so that data points can fill axes.
-
-    Assuming that x/y span a rectangle inside of ax, this method computes
-    a best guess of the marker size to completely fill the area.
-
-    Note: The marker area calculation in matplotlib seems to assume a square
-          shape. If others shapes are desired (e.g. 'h'), a mild increase in
-          size will be necessary.
-
-    Args:
-        fig: matplotlib.figure
-        ax: matplib.axes that should hold x,y
-        x, y: list of map positions
-
-    Returns:
-        int, the size (actually: area) to be used for scatter(..., s= )
-    """
-    # get size of bounding box in pixels
-    # from http://stackoverflow.com/questions/19306510/determine-matplotlib-axis-size-in-pixels
-    from math import ceil
-    bbox = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    width, height = bbox.width, bbox.height
-    width *= fig.dpi
-    height *= fig.dpi
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    dx = x.max() - x.min()
-    dy = y.max() - y.min()
-    filling_x = dx / (xlim[1] - xlim[0])
-    filling_y = dy / (ylim[1] - ylim[0])
-    # assuming x,y to ~fill a rectangle: get the point density
-    area = filling_x*filling_y * width * height
-    s = area / x.size
-    return int(ceil(s)) # round up to be on the safe side
