@@ -154,11 +154,16 @@ class Map():
         else:
             _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
 
-        # clean up previous grid: creates runtime errors...
-        grid_artists = self.artists('grid-meridian') + self.artists('grid-parallel')
-        for artist in grid_artists:
+        # clean up previous grid
+        artists = self.artists('grid-meridian') + self.artists('grid-parallel')
+        for artist in artists:
                 artist.remove()
 
+        # clean up meridian and parallel labels because they're tied to the grid
+        artists = self.artists('meridian-label') + self.artists('parallel-label')
+        for artist in artists:
+                artist.remove()
+                
         for p in _parallels:
             self._setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
         for m in _meridians:
