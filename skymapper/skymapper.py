@@ -1,7 +1,7 @@
 import matplotlib
 import numpy as np
 import re
-from .healpix import *
+from . import healpix
 
 # decorator for registering the survey footprint loader functions
 footprint_loader = {}
@@ -595,19 +595,19 @@ class Map():
         self.ax.add_collection(coll)
         return coll
 
-    def healpix(self, m, nside, nest=False, color_percentiles=[10,90], **kwargs):
+    def healpix(self, m, nest=False, color_percentiles=[10,90], **kwargs):
         """Plot HealPix map
 
         Args:
             m: Healpix map array
-            nside: HealPix nside
             nest: HealPix nest
             color_percentiles: lower and higher cutoff percentile for map coloring
         """
 
         # determine ra, dec of map; restrict to non-empty cells
         pixels = np.flatnonzero(m)
-        vertices = getHealpixVertices(pixels, nside, nest=nest)
+        nside = healpix.hp.npix2nside(m.size)
+        vertices = healpix.getHealpixVertices(pixels, nside, nest=nest)
         color = m[pixels]
 
         # styling
@@ -623,6 +623,34 @@ class Map():
 
         # make a map of the vertices
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+
+    def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
+        """Plot density map using healpix binning
+
+        Args:
+            ra: list of rectascensions
+            dec: list of declinations
+            nside: HealPix nside
+            color_percentiles: lower and higher cutoff percentile for map coloring
+        """
+        # get count in healpix cells, restrict to non-empty cells
+        bc, _, _, vertices = healpix.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
+        color = bc
+
+        # styling
+        cmap = kwargs.pop("cmap", "YlOrRd")
+        vmin = kwargs.pop("vmin", None)
+        vmax = kwargs.pop("vmax", None)
+        if vmin is None or vmax is None:
+            vlim = np.percentile(color, color_percentiles)
+            if vmin is None:
+                vmin = vlim[0]
+            if vmax is None:
+                vmax = vlim[1]
+
+        # make a map of the vertices
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+
 
 ##### Start of free methods #####
 
@@ -723,46 +751,6 @@ def createConicMap(ax, ra, dec, proj_class=None, ra0=None, dec0=None, pad=0.02, 
     proj = getOptimalConicProjection(ra, dec, proj_class=proj_class, ra0=ra0, dec0=dec0)
     setupConicAxes(ax, ra, dec, proj, pad=pad)
     return proj
-
-def plotDensity(ra, dec, nside=1024, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label='$n$ [arcmin$^{-2}$]', proj_class=None, ax=None):
-    """Plot density map on optimally chosen projection.
-
-    Args:
-        ra: list of rectascensions
-        dec: list of declinations
-        nside: HealPix nside
-        sep: separation of graticules [deg]
-        cmap: colormap name
-        bgcolor: background color of ax
-        colorbar: whether to draw colorbar
-        cb_label: label of colorbar
-        proj_class: constructor of projection class, see getOptimalConicProjection()
-        ax: matplotlib axes (will be created if not given)
-    Returns:
-        figure, axes, projection
-    """
-
-    # setup figure
-    fig, ax = createFigureAx(ax=ax)
-
-    # setup map: define map optimal for given RA/Dec
-    proj = createConicMap(ax, ra, dec, proj_class=proj_class)
-
-    # get count in healpix cells, restrict to non-empty cells
-    bc, _, _, vertices = getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
-
-    # make a map of the vertices
-    poly = makeVertexMap(vertices, bc, proj, ax, cmap=cmap)
-
-    # do we want colorbar?
-    if not colorbar:
-        poly = None
-
-    # create nice map
-    makeMapNice(fig, ax, proj, dec, sep=sep, bgcolor=bgcolor, cb_collection=poly, cb_label=cb_label)
-
-    fig.show()
-    return fig, ax, proj
 
 
 def plotMap(ra, dec, value, sep=5, marker="h", markersize=None, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Map value", proj_class=None, ax=None):
