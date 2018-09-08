@@ -88,9 +88,9 @@ class BaseProjection(object):
 class Projection(BaseProjection, metaclass=Meta):
     pass
 
-class AlbersEqualAreaConic(Projection):
+class Albers(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
-        """Albers Equal-Area projection
+        """Albers Equal-Area conic projection
 
         AEA is a conic projection with an origin along the lines connecting
         the poles. It preserves relative area, but is not conformal,
@@ -153,7 +153,7 @@ class AlbersEqualAreaConic(Projection):
         return self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
 
     def __repr__(self):
-        return "AlbersEqualArea(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+        return "Albers(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 class LambertConformalConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -443,3 +443,23 @@ class Mollweide(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2, 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
+
+class Collignon(HyperElliptical):
+    def __init__(self, ra_0, gamma=1.):
+        alpha, k = 0, 1
+        super(Collignon, self).__init__(ra_0, alpha, k, gamma)
+
+class EckertII(HyperElliptical):
+    def __init__(self, ra_0, gamma=1.):
+        alpha, k = 0.5, 1
+        super(EckertII, self).__init__(ra_0, alpha, k, gamma)
+
+class EckertIV(HyperElliptical):
+    def __init__(self, ra_0, gamma=1.):
+        alpha, k = 0.5, 2
+        super(EckertIV, self).__init__(ra_0, alpha, k, gamma)
+
+class HyperCloid(HyperElliptical):
+    def __init__(self, ra_0, gamma=1):
+        alpha, k = 0, 1.5
+        super(HyperCloid, self).__init__(ra_0, alpha, k, gamma)
