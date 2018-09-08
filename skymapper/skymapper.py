@@ -15,6 +15,16 @@ def register(surveyname=""):
 DEG2RAD = np.pi/180
 resolution = 75
 
+def skyDistance(radec, radec_ref):
+    ra, dec = radec
+    ra_ref, dec_ref = radec_ref
+    ra_diff = np.abs(ra - ra_ref)
+    mask = ra_diff > 180
+    ra_diff[mask] = 360 - ra_diff[mask]
+    ra_diff *= np.cos(dec_ref*DEG2RAD)
+    dec_diff = dec - dec_ref
+    return np.sqrt(ra_diff**2 + dec_diff**2)
+
 # extrapolation function from
 # http://stackoverflow.com/questions/2745329/how-to-make-scipy-interpolate-give-an-extrapolated-result-beyond-the-input-range
 # improved to order x and y to have ascending x
@@ -706,7 +716,7 @@ class Map():
         return artist
 
     def extrapolate(self, ra, dec, value, resolution=300, **kwargs):
-        """Extrapolate ra,dec samples over entire map
+        """Extrapolate ra,dec samples on the entire sphere and project on the map
 
         Requires scipy, uses default `scipy.interpolate.Rbf`.
 
@@ -717,7 +727,9 @@ class Map():
             resolution: number of evaluated cells per linear map dimension
             **kwargs: arguments for matplotlib.imshow
         """
-        x, y = self.proj.transform(ra, dec)
+        # interpolate samples in RA/DEC
+        from scipy.interpolate import Rbf
+        rbfi = Rbf(ra, dec, value, norm=skyDistance)
 
         # TODO: get limits of the map from all x/y data of the edge artists:
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
@@ -727,9 +739,8 @@ class Map():
         inside = self.proj.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
 
-        from scipy.interpolate import Rbf
-        rbfi = Rbf(x, y, value)
-        vp[inside] = rbfi(xp[inside], yp[inside])
+        rap, decp = self.proj.invert(xp, yp)
+        vp[inside] = rbfi(rap[inside], decp[inside])
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         return self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
 
