@@ -9,6 +9,6 @@ setup(name="skymapper",
       author_email="peter.m.melchior@gmail.com",
       url="https://github.com/pmelchior/skymapper",
       requires=["matplotlib", "numpy"],
-      packages=["skymapper", "skymapper.surveys"],
-      package_data={"skymapper.surveys": ['*.txt']}
+      packages=["skymapper", "skymapper.survey"],
+      package_data={"skymapper.survey": ['*.txt']}
 )

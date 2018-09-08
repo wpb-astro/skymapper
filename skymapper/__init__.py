@@ -1,3 +1,3 @@
 from .skymapper import *
 from .projection import *
-from . import surveys
+from . import survey
