@@ -73,7 +73,7 @@ class Map():
     def __init__(self, proj, ax=None, interactive=True, **kwargs):
         self.proj = proj
         self._setFigureAx(ax, interactive=interactive)
-        self.setEdge(**kwargs)
+        self._setEdge(**kwargs)
 
     def _setFigureAx(self, ax=None, interactive=True):
         if ax is None:
@@ -98,20 +98,20 @@ class Map():
 
     @property
     def parallels(self):
-        return [ float(m.group(1)) for c,m in self.getArtists(r'grid-parallel-([\-\+0-9.]+)', regex=True) ]
+        return [ float(m.group(1)) for c,m in self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True) ]
 
     @property
     def meridians(self):
-        return [ float(m.group(1)) for c,m in self.getArtists(r'grid-meridian-([\-\+0-9.]+)', regex=True) ]
+        return [ float(m.group(1)) for c,m in self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True) ]
 
-    def getArtists(self, gid, regex=False):
+    def artists(self, gid, regex=False):
         if regex:
             matches = [ re.match(gid, c.get_gid()) if c.get_gid() is not None else None for c in self.ax.get_children() ]
             return [ (c,m) for c,m in zip(self.ax.get_children(), matches) if m is not None ]
         else: # direct match
             return [ c for c in self.ax.get_children() if c.get_gid() is not None and c.get_gid().find(gid) != -1 ]
 
-    def setParallel(self, p, **kwargs):
+    def _setParallel(self, p, **kwargs):
         ls = kwargs.pop('ls', '-')
         lw = kwargs.pop('lw', 0.5)
         c = kwargs.pop('c', 'k')
@@ -120,7 +120,7 @@ class Map():
         x_, y_ = self.proj.transform(self._ra_range, p*np.ones(len(self._ra_range)))
         self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
 
-    def setMeridian(self, m, **kwargs):
+    def _setMeridian(self, m, **kwargs):
         ls = kwargs.pop('ls', '-')
         lw = kwargs.pop('lw', 0.5)
         c = kwargs.pop('c', 'k')
@@ -129,7 +129,7 @@ class Map():
         x_, y_ = self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range)
         self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
 
-    def setEdge(self, **kwargs):
+    def _setEdge(self, **kwargs):
         self._dec_range = np.linspace(-90, 90, resolution)
         self._ra_range = np.linspace(-180, 180, resolution) + self.proj.ra_0
 
@@ -139,11 +139,11 @@ class Map():
         zorder = kwargs.pop('zorder', 100)
 
         for p in [-90, 90]:
-            self.setParallel(p, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-parallel', **kwargs)
+            self._setParallel(p, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-parallel', **kwargs)
         for m in [self.proj.ra_0 + 180, self.proj.ra_0 - 180]:
-            self.setMeridian(m, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-meridian', **kwargs)
+            self._setMeridian(m, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-meridian', **kwargs)
 
-    def setGrid(self, sep=15, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+    def grid(self, sep=30, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self._dec_range = np.linspace(dec_min, dec_max, resolution)
         self._ra_range = np.linspace(ra_min, ra_max, resolution) + self.proj.ra_0
         parallels = np.arange(-90+sep,90,sep)
@@ -153,16 +153,16 @@ class Map():
             meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
 
         # clean up previous grid: creates runtime errors...
-        grid_artists = self.getArtists('grid-meridian') + self.getArtists('grid-parallel')
+        grid_artists = self.artists('grid-meridian') + self.artists('grid-parallel')
         for artist in grid_artists:
                 artist.remove()
 
         for p in parallels:
-            self.setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
+            self._setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
         for m in meridians:
-            self.setMeridian(m, gid='grid-meridian-%r' % m, **kwargs)
+            self._setMeridian(m, gid='grid-meridian-%r' % m, **kwargs)
 
-    def getGradient(self, ra, dec, sep=1e-2, direction='parallel'):
+    def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
         # gradients in *positive* dec and *negative* ra
         assert direction in ['parallel', 'meridian']
         correction = 1
@@ -196,7 +196,7 @@ class Map():
         if loc == "right":
             return "left"
 
-    def setMeridianLabelAtParallel(self, p, fmt=degFormatter, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+    def labelMeridianAtParallel(self, p, fmt=degFormatter, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
 
         if loc is None:
             if p >= 0:
@@ -216,7 +216,7 @@ class Map():
         # determine rot_base so that central label is upright
         if rotation is None:
             m = self.proj.ra_0
-            dxy = self.getGradient(m, p, direction=direction)
+            dxy = self.gradient(m, p, direction=direction)
             angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
             options = np.arange(-2,3) * 90 # multiples of 90 deg
             closest = np.argmin(np.abs(options - angle))
@@ -228,13 +228,13 @@ class Map():
         for m in meridians:
             # move label along meridian
             xp, yp = self.proj.transform(m, p)
-            dxy = self.getGradient(m, p, direction="meridian")
+            dxy = self.gradient(m, p, direction="meridian")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if loc == 'bottom':
                 dxy *= -1
 
             if rotation is None:
-                dxy_ = self.getGradient(m, p, direction=direction)
+                dxy_ = self.gradient(m, p, direction=direction)
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
             else:
                 angle = rotation
@@ -244,7 +244,7 @@ class Map():
 
             self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
-    def setParallelLabelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+    def labelParallelAtMeridian(self, m, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
 
         if loc is None:
             if m <= 0:
@@ -264,7 +264,7 @@ class Map():
         # determine rot_base so that central label is upright
         if rotation is None:
             p = 0
-            dxy = self.getGradient(m, p, direction=direction)
+            dxy = self.gradient(m, p, direction=direction)
             angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
             options = np.arange(-2,3) * 90
             closest = np.argmin(np.abs(options - angle))
@@ -276,20 +276,20 @@ class Map():
         for p in parallels:
             # move label along parallel
             xp, yp = self.proj.transform(m, p)
-            dxy = self.getGradient(m, p, direction="parallel")
+            dxy = self.gradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if loc == 'left':
                 dxy *= -1
 
             if rotation is None:
-                dxy_ = self.getGradient(m, p, direction=direction)
+                dxy_ = self.gradient(m, p, direction=direction)
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
             else:
                 angle = rotation
 
             self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
-    def setMeridianLabelsAtFrame(self, fmt=degFormatter, loc=None, meridians=None, pad=None, **kwargs):
+    def labelMeridiansAtFrame(self, fmt=degFormatter, loc=None, meridians=None, pad=None, **kwargs):
         self._set_meridianlabelframe_args = locals()
         self._set_meridianlabelframe_args.pop('self')
         for k,v in self._set_meridianlabelframe_args.pop('kwargs'):
@@ -313,7 +313,7 @@ class Map():
         poss = {"bottom": 0, "top": 1}
 
         # check if loc has frame
-        frame_artists = self.getArtists(r'frame-([a-zA-Z]+)', regex=True)
+        frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
         for loc in locs:
             pos = poss[loc]
@@ -322,7 +322,7 @@ class Map():
 
             if loc in frame_locs:
                 # find all parallel grid lines
-                m_artists = self.getArtists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
+                m_artists = self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
                 for c,match in m_artists:
                     m = float(match.group(1))
                     if m in meridians:
@@ -331,7 +331,7 @@ class Map():
                         xm_at_ylim = extrap(ylim, ym, xm)[pos]
                         if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.proj.contains(xm_at_ylim, ylim[pos]):
                             m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
-                            dxy = self.getGradient(m_, p_, direction="meridian")
+                            dxy = self.gradient(m_, p_, direction="meridian")
                             dxy /= np.sqrt((dxy**2).sum())
                             dxy *= pad / dxy[1] # same pad from frame
                             if loc == "bottom":
@@ -346,7 +346,7 @@ class Map():
 
                             self.ax.annotate(fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
-    def setParallelLabelsAtFrame(self, fmt=degFormatter, loc=None, parallels=None, pad=None, **kwargs):
+    def labelParallelsAtFrame(self, fmt=pmDegFormatter, loc=None, parallels=None, pad=None, **kwargs):
 
         self._set_parallellabelframe_args = locals()
         self._set_parallellabelframe_args.pop('self')
@@ -373,7 +373,7 @@ class Map():
         poss = {"left": 0, "right": 1}
 
         # check if loc has frame
-        frame_artists = self.getArtists(r'frame-([a-zA-Z]+)', regex=True)
+        frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
         for loc in locs:
             pos = poss[loc]
@@ -382,7 +382,7 @@ class Map():
 
             if loc in frame_locs:
                 # find all parallel grid lines
-                m_artists = self.getArtists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
+                m_artists = self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
                 for c,match in m_artists:
                     p = float(match.group(1))
                     if p in parallels:
@@ -391,7 +391,7 @@ class Map():
                         yp_at_xlim = extrap(xlim, xp, yp)[pos]
                         if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.proj.contains(xlim[pos], yp_at_xlim):
                             m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
-                            dxy = self.getGradient(m_, p_, direction='parallel')
+                            dxy = self.gradient(m_, p_, direction='parallel')
                             dxy /= np.sqrt((dxy**2).sum())
                             dxy *= pad / dxy[0] # same pad from frame
                             if loc == "left":
@@ -403,21 +403,17 @@ class Map():
                             self.ax.annotate(fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
 
-    def setFrame(self, loc=None, precision=1000):
+    def _setFrame(self, precision=1000):
         # remember function arguments to recreate
         self._set_frame_args = locals()
         self._set_frame_args.pop('self')
 
         # clean up existing frame
-        frame_artists = self.getArtists(r'frame-([a-zA-Z]+)', regex=True)
+        frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         for c,m in frame_artists:
             c.remove()
 
         locs = ['left', 'bottom', 'right', 'top']
-        if loc is not None:
-            assert loc in locs
-            locs = [loc]
-
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
 
         for loc in locs:
@@ -479,21 +475,21 @@ class Map():
                 else:
                     break
 
-    def clearFrame(self):
-        frame_artists = self.getArtists('frame-')
+    def _clearFrame(self):
+        frame_artists = self.artists('frame-')
         for artist in frame_artists:
             artist.remove()
 
-    def resetFrame(self):
-        self.setFrame(**self._set_frame_args)
-        self.setMeridianLabelsAtFrame(**self._set_meridianlabelframe_args)
-        self.setParallelLabelsAtFrame(**self._set_parallellabelframe_args)
+    def _resetFrame(self):
+        self._setFrame(**self._set_frame_args)
+        self.labelMeridiansAtFrame(**self._set_meridianlabelframe_args)
+        self.labelParallelsAtFrame(**self._set_parallellabelframe_args)
 
     def _pressHandler(self, evt):
         if evt.button != 1: return
         if evt.dblclick: return
         # remove frame and labels
-        self.clearFrame()
+        self._clearFrame()
         self.fig.canvas.draw()
 
     def _scrollHandler(self, evt):
@@ -502,7 +498,7 @@ class Map():
         if evt.step == 0: return
 
         # remove frame and labels
-        self.clearFrame()
+        self._clearFrame()
 
         # scroll to fixed pointer position: google maps style
         factor = 0.25
@@ -516,18 +512,18 @@ class Map():
 
         self.ax.set_xlim(xlim_, xlim__)
         self.ax.set_ylim(ylim_, ylim__)
-        self.resetFrame()
+        self._resetFrame()
         self.fig.canvas.draw()
 
     def _releaseHandler(self, evt):
         if evt.button != 1: return
         if evt.dblclick: return
-        self.resetFrame()
+        self._resetFrame()
         self.fig.canvas.draw()
 
 
-##### Start of free methods #####
 
+##### Start of free methods #####
 
 def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     """Determine optimal configuration of conic map.
