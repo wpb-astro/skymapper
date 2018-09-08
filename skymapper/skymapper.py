@@ -1,6 +1,7 @@
 import matplotlib
 import numpy as np
 import re
+from .healpix import *
 
 # decorator for registering the survey footprint loader functions
 footprint_loader = {}
@@ -10,12 +11,6 @@ def register(surveyname=""):
         footprint_loader[surveyname] = func
         return func
     return decorate
-
-# python 3 compatible
-try:
-    xrange
-except NameError:
-    xrange = range
 
 DEG2RAD = np.pi/180
 resolution = 75
@@ -540,11 +535,11 @@ class Map():
     #### common plot type for maps: follow mpl convention ####
     def plot(self, ra, dec, *args, **kwargs):
         x, y = self.proj.transform(ra, dec)
-        self.ax.plot(x, y, *args, **kwargs)
+        return self.ax.plot(x, y, *args, **kwargs)
 
     def scatter(self, ra, dec, **kwargs):
         x, y = self.proj.transform(ra, dec)
-        self.ax.scatter(x, y, **kwargs)
+        return self.ax.scatter(x, y, **kwargs)
 
     def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
         x, y = self.proj.transform(ra, dec)
@@ -555,7 +550,13 @@ class Map():
         else:
             angle = rotation
 
-        self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", **kwargs)
+        return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", **kwargs)
+
+    def show(self, *args, **kwargs):
+        self.fig.show(*args, **kwargs)
+
+    def savefig(self, *args, **kwargs):
+        self.fig.savefig(*args, **kwargs)
 
     #### special plot types for maps ####
     def footprint(self, surveyname, **kwargs):
@@ -571,6 +572,57 @@ class Map():
         from matplotlib.patches import Polygon
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
         self.ax.add_artist(poly)
+        return poly
+
+    def vertex(self, vertices, color=None, vmin=None, vmax=None, **kwargs):
+        """Plot polygons (e.g. Healpix vertices)
+
+        Args:
+            vertices: cell boundaries in RA/Dec, from getCountAtLocations()
+            color: string or matplib color, or numeric array to set polygon colors
+            vmin: if color is numeric array, use vmin to set color of minimum
+            vmax: if color is numeric array, use vmin to set color of minimum
+            **kwargs: matplotlib.collections.PolyCollection keywords
+        Returns:
+            matplotlib.collections.PolyCollection
+        """
+        from matplotlib.collections import PolyCollection
+        vertices_ = np.empty_like(vertices)
+        vertices_[:,:,0], vertices_[:,:,1] = self.proj.transform(vertices[:,:,0], vertices[:,:,1])
+        coll = PolyCollection(vertices_, array=color, **kwargs)
+        coll.set_clim(vmin=vmin, vmax=vmax)
+        coll.set_edgecolor("face")
+        self.ax.add_collection(coll)
+        return coll
+
+    def healpix(self, m, nside, nest=False, color_percentiles=[10,90], **kwargs):
+        """Plot HealPix map
+
+        Args:
+            m: Healpix map array
+            nside: HealPix nside
+            nest: HealPix nest
+            color_percentiles: lower and higher cutoff percentile for map coloring
+        """
+
+        # determine ra, dec of map; restrict to non-empty cells
+        pixels = np.flatnonzero(m)
+        vertices = getHealpixVertices(pixels, nside, nest=nest)
+        color = m[pixels]
+
+        # styling
+        cmap = kwargs.pop("cmap", "YlOrRd")
+        vmin = kwargs.pop("vmin", None)
+        vmax = kwargs.pop("vmax", None)
+        if vmin is None or vmax is None:
+            vlim = np.percentile(color, color_percentiles)
+            if vmin is None:
+                vmin = vlim[0]
+            if vmax is None:
+                vmax = vlim[1]
+
+        # make a map of the vertices
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
 ##### Start of free methods #####
 
@@ -648,27 +700,6 @@ def setupConicAxes(ax, ra, dec, proj, pad=0.02):
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
 
-def cloneMap(ax0, ax):
-    """Convenience function to copy the setup of a map axes.
-
-    Note that this sets up the axis, in particular the x/y limits, but does
-    not clone any content (data or meridian/parellel patches or labels).
-
-    Args:
-        ax0: previousely configured matplotlib axes
-        ax: axes to be configured
-
-    Returns:
-        None
-    """
-    ax.set_axis_bgcolor(ax0.get_axis_bgcolor())
-    # remove ticks as they look odd with curved/angled parallels/meridians
-    ax.xaxis.set_tick_params(which='both', length=0)
-    ax.yaxis.set_tick_params(which='both', length=0)
-    # set x/y limits
-    ax.set_xlim(ax0.get_xlim())
-    ax.set_ylim(ax0.get_ylim())
-
 def createConicMap(ax, ra, dec, proj_class=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
     """Create conic projection and set up axes.
 
@@ -692,109 +723,6 @@ def createConicMap(ax, ra, dec, proj_class=None, ra0=None, dec0=None, pad=0.02, 
     proj = getOptimalConicProjection(ra, dec, proj_class=proj_class, ra0=ra0, dec0=dec0)
     setupConicAxes(ax, ra, dec, proj, pad=pad)
     return proj
-
-
-def getHealpixVertices(pixels, nside, nest=False):
-    import healpy as hp
-    vertices = np.zeros((pixels.size, 4, 2))
-    for i in xrange(pixels.size):
-        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i], nest=nest)))
-        corners = np.array(corners) * 180. / np.pi
-        diff = corners[1] - corners[1][0]
-        diff[diff > 180] -= 360
-        diff[diff < -180] += 360
-        corners[1] = corners[1][0] + diff
-        vertices[i,:,0] = corners[1]
-        vertices[i,:,1] = 90.0 - corners[0]
-    return vertices
-
-def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False):
-    """Get number density of objects from RA/Dec in HealPix cells.
-
-    Requires: healpy
-
-    Args:
-        ra: list of rectascensions
-        dec: list of declinations
-        nside: HealPix nside
-        per_area: return counts in units of 1/arcmin^2
-        return_vertices: whether to also return the boundaries of HealPix cells
-
-    Returns:
-        bc, ra_, dec_, [vertices]
-        bc: count of objects in a HealPix cell if count > 0
-        ra_: rectascension of the cell center (same format as ra/dec)
-        dec_: declinations of the cell center (same format as ra/dec)
-        vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
-    """
-    import healpy as hp
-    # get healpix pixels
-    ipix = hp.ang2pix(nside, (90-dec)/180*np.pi, ra/180*np.pi, nest=False)
-    # count how often each pixel is hit
-    bc = np.bincount(ipix)
-    pixels = np.nonzero(bc)[0]
-    bc = bc[bc>0]
-    if per_area:
-        bc = bc.astype('f8')
-        bc /= hp.nside2resol(nside, arcmin=True)**2 # in arcmin^-2
-    # get position of each pixel in RA/Dec
-    theta, phi = hp.pix2ang(nside, pixels, nest=False)
-    ra_ = phi*180/np.pi
-    dec_ = 90 - theta*180/np.pi
-
-    # get the vertices that confine each pixel
-    # convert to RA/Dec (thanks to Eric Huff)
-    if return_vertices:
-        vertices = getHealpixVertices(pixels, nside)
-        return bc, ra_, dec_, vertices
-    else:
-        return bc, ra_, dec_
-
-def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vertices=False):
-    """Reduce values at given RA/Dec in HealPix cells to a scalar.
-
-    Requires: healpy
-
-    Args:
-        ra: list of rectascensions
-        dec: list of declinations
-        value: list of values to be reduced
-        reduce_fct: function to operate on values
-        nside: HealPix nside
-        per_area: return counts in units of 1/arcmin^2
-        return_vertices: whether to also return the boundaries of HealPix cells
-
-    Returns:
-        v, ra_, dec_, [vertices]
-        v: reduction of values in a HealPix cell if count > 0
-        ra_: rectascension of the cell center (same format as ra/dec)
-        dec_: declinations of the cell center (same format as ra/dec)
-        vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
-    """
-    import healpy as hp
-    # get healpix pixels
-    ipix = hp.ang2pix(nside, (90-dec)/180*np.pi, ra/180*np.pi, nest=False)
-    # count how often each pixel is hit, only use non-empty pixels
-    pixels = np.nonzero(np.bincount(ipix))[0]
-
-    v = np.empty(pixels.size)
-    for i in xrange(pixels.size):
-        sel = (ipix == pixels[i])
-        v[i] = reduce_fct(value[sel])
-
-    # get position of each pixel in RA/Dec
-    theta, phi = hp.pix2ang(nside, pixels, nest=False)
-    ra_ = phi*180/np.pi
-    dec_ = 90 - theta*180/np.pi
-
-    # get the vertices that confine each pixel
-    # convert to RA/Dec (thanks to Eric Huff)
-    if return_vertices:
-        vertices = getHealpixVertices(pixels, nside)
-        return v, ra_, dec_, vertices
-    else:
-        return v, ra_, dec_
-
 
 def plotDensity(ra, dec, nside=1024, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label='$n$ [arcmin$^{-2}$]', proj_class=None, ax=None):
     """Plot density map on optimally chosen projection.
@@ -825,55 +753,6 @@ def plotDensity(ra, dec, nside=1024, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", co
 
     # make a map of the vertices
     poly = makeVertexMap(vertices, bc, proj, ax, cmap=cmap)
-
-    # do we want colorbar?
-    if not colorbar:
-        poly = None
-
-    # create nice map
-    makeMapNice(fig, ax, proj, dec, sep=sep, bgcolor=bgcolor, cb_collection=poly, cb_label=cb_label)
-
-    fig.show()
-    return fig, ax, proj
-
-
-def plotHealpix(m, nside, nest=False, use_vertices=True, sep=5, cmap="YlOrRd", bgcolor="#aaaaaa", colorbar=True, cb_label="Healpix value", proj_class=None, ax=None):
-    """Plot HealPix map on optimally chosen projection.
-
-    Args:
-        m: Healpix map array
-        nside: HealPix nside
-        nest: HealPix nest
-        use_vertices: calculate individual polygons per HealPix cell
-        sep: separation of graticules [deg]
-        cmap: colormap name
-        bgcolor: background color of ax
-        colorbar: whether to draw colorbar
-        cb_label: label of colorbar
-        proj_class: constructor of projection class, see getOptimalConicProjection()
-        ax: matplotlib axes (will be created if not given)
-    Returns:
-        figure, axes, projection
-    """
-
-    # setup figure
-    fig, ax = createFigureAx(ax=ax)
-
-    # determine ra, dec of map; restrict to non-empty cells
-    pixels = np.flatnonzero(m)
-
-    vertices = getHealpixVertices(pixels, nside, nest=nest)
-    ra_dec = vertices.mean(axis=1)
-    ra, dec = ra_dec[:,0], ra_dec[:,1]
-
-    # setup map: define map optimal for given RA/Dec
-    proj = createConicMap(ax, ra, dec, proj_class=proj_class)
-
-    # make a map of the vertices
-    if use_vertices:
-        poly = makeVertexMap(vertices, m[pixels], proj, ax, cmap=cmap)
-    else:
-        poly = makeScatterMap(ra, dec, m[pixels], proj, ax, cmap=cmap)
 
     # do we want colorbar?
     if not colorbar:
@@ -926,19 +805,6 @@ def plotMap(ra, dec, value, sep=5, marker="h", markersize=None, cmap="YlOrRd", b
     return fig, ax, proj
 
 
-def makeVertexMap(vertices, color, proj, ax, cmap="YlOrRd"):
-    # add healpix counts from vertices
-    vmin, vmax = np.percentile(color,[10,90])
-    return addPolygons(vertices, proj, ax, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=3, rasterized=True)
-
-def makeScatterMap(ra, dec, val, proj, ax, marker="s", markersize=None, cmap="YlOrRd"):
-    x,y = proj(ra, dec)
-    fig = ax.get_figure()
-    if markersize is None:
-        markersize = getMarkerSizeToFill(fig, ax, x, y)
-    vmin, vmax = np.percentile(val,[10,90])
-    sc = ax.scatter(x, y, c=val, marker=marker, s=markersize, edgecolors='None', zorder=3, vmin=vmin, vmax=vmax, cmap=cmap, rasterized=True)
-    return sc
 
 def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None, cb_label=""):
     # add lines and labels for meridians/parallels
@@ -966,28 +832,6 @@ def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None
     fig.tight_layout()
 
 
-def addPolygons(vertices, proj, ax, color=None, vmin=None, vmax=None, **kwargs):
-    """Plot polygons (e.g. Healpix cells) onto map.
-
-    Args:
-        vertices: Healpix cell boundaries in RA/Dec, from getCountAtLocations()
-        proj: map projection
-        ax: matplotlib axes
-        color: string or matplib color, or numeric array to set polygon colors
-        vmin: if color is numeric array, use vmin to set color of minimum
-        vmax: if color is numeric array, use vmin to set color of minimum
-        **kwargs: matplotlib.collections.PolyCollection keywords
-    Returns:
-        matplotlib.collections.PolyCollection
-    """
-    from matplotlib.collections import PolyCollection
-    vertices_ = np.empty_like(vertices)
-    vertices_[:,:,0], vertices_[:,:,1] = proj(vertices[:,:,0], vertices[:,:,1])
-    coll = PolyCollection(vertices_, array=color, **kwargs)
-    coll.set_clim(vmin=vmin, vmax=vmax)
-    coll.set_edgecolor("face")
-    ax.add_collection(coll)
-    return coll
 
 
 def getMarkerSizeToFill(fig, ax, x, y):
