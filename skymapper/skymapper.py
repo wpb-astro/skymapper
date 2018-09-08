@@ -2,14 +2,8 @@ import matplotlib
 import numpy as np
 import re
 from . import healpix
-
-# decorator for registering the survey footprint loader functions
-survey_register = {}
-def register_survey(cls):
-    survey_register[cls.__name__] = cls
-
+from . import survey_register
 DEG2RAD = np.pi/180
-resolution = 75
 
 def skyDistance(radec, radec_ref):
     ra, dec = radec
@@ -80,8 +74,9 @@ def hourAngleFormatter(ra):
 
 
 class Map():
-    def __init__(self, proj, ax=None, interactive=True, **kwargs):
+    def __init__(self, proj, ax=None, resolution=75, interactive=True, **kwargs):
         self.proj = proj
+        self.resolution = resolution
         self._setFigureAx(ax, interactive=interactive)
         self._setEdge(**kwargs)
 
@@ -140,8 +135,8 @@ class Map():
         self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
 
     def _setEdge(self, **kwargs):
-        self._dec_range = np.linspace(-90, 90, resolution)
-        self._ra_range = np.linspace(-180, 180, resolution) + self.proj.ra_0
+        self._dec_range = np.linspace(-90, 90, self.resolution)
+        self._ra_range = np.linspace(-180, 180, self.resolution) + self.proj.ra_0
 
         lw = kwargs.pop('lw', 1)
         c = kwargs.pop('c', '#444444')
@@ -156,8 +151,8 @@ class Map():
     def grid(self, sep=30, parallel_fmt=pmDegFormatter, meridian_fmt=degFormatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self.parallel_fmt = parallel_fmt
         self.meridian_fmt = meridian_fmt
-        self._dec_range = np.linspace(dec_min, dec_max, resolution)
-        self._ra_range = np.linspace(ra_min, ra_max, resolution) + self.proj.ra_0
+        self._dec_range = np.linspace(dec_min, dec_max, self.resolution)
+        self._ra_range = np.linspace(ra_min, ra_max, self.resolution) + self.proj.ra_0
         _parallels = np.arange(-90+sep,90,sep)
         if self.proj.ra_0 % sep == 0:
             _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep - 1), -sep)
@@ -593,7 +588,7 @@ class Map():
         """
         # construct survey loader class and call it
         ra, dec = survey_register[surveyname].load()
-        
+
         x,y  = self.proj.transform(ra, dec)
         from matplotlib.patches import Polygon
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from ..skymapper import register_survey
+from .. import register_survey
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/

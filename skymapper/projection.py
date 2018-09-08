@@ -1,12 +1,5 @@
 import numpy as np
 
-# only needed for some projections, not enough to make scipy requirement
-try:
-    import scipy.integrate
-    import scipy.optimize
-except ImportError:
-    pass
-
 DEG2RAD = np.pi/180
 
 def _toArray(x):
@@ -16,8 +9,28 @@ def _toArray(x):
         return np.array(x), True
     return np.array([x]), False
 
-class Projection(object):
+# only needed for some projections, not enough to make scipy requirement
+try:
+    import scipy.integrate
+    import scipy.optimize
+except ImportError:
+    pass
+
+# metaclass for registration.
+# see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
+from . import register_projection
+class Meta(type):
+    def __new__(meta, name, bases, class_dict):
+        cls = type.__new__(meta, name, bases, class_dict)
+        register_projection(cls)
+        return cls
+
+class BaseProjection(object):
     """Projection base class
+
+    NOTE: Do not directly derive from `BaseProjection`, use `Projection` instead.
+    This will automatically register the projection and make it available to
+    functions that query projections.
 
     Every projection needs to implement three methods:
     * `transform(self, ra, dec)`: mapping from ra/dec to map x/y
@@ -71,6 +84,9 @@ class Projection(object):
         if isArray:
             return ra_
         return ra_[0]
+
+class Projection(BaseProjection, metaclass=Meta):
+    pass
 
 class AlbersEqualAreaConic(Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
