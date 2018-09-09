@@ -3,6 +3,8 @@ import numpy as np
 import re
 from . import healpix
 from . import survey_register
+from matplotlib.patches import Polygon
+
 DEG2RAD = np.pi/180
 
 def skyDistance(radec, radec_ref):
@@ -116,37 +118,48 @@ class Map():
         else: # direct match
             return [ c for c in self.ax.get_children() if c.get_gid() is not None and c.get_gid().find(gid) != -1 ]
 
+    def _getParallel(self, p, reverse=False):
+        if not reverse:
+            return self.proj.transform(self._ra_range, p*np.ones(len(self._ra_range)))
+        return self.proj.transform(self._ra_range[::-1], p*np.ones(len(self._ra_range)))
+
+    def _getMeridian(self, m, reverse=False):
+        if not reverse:
+            return self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range)
+        return self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range[::-1])
+
     def _setParallel(self, p, **kwargs):
-        ls = kwargs.pop('ls', '-')
-        lw = kwargs.pop('lw', 0.5)
-        c = kwargs.pop('c', 'k')
-        alpha = kwargs.pop('alpha', 0.2)
-        zorder = kwargs.pop('zorder', 10)
-        x_, y_ = self.proj.transform(self._ra_range, p*np.ones(len(self._ra_range)))
-        self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
+        x_, y_ = self._getParallel(p)
+        self.ax.plot(x_, y_, **kwargs)
 
     def _setMeridian(self, m, **kwargs):
-        ls = kwargs.pop('ls', '-')
-        lw = kwargs.pop('lw', 0.5)
-        c = kwargs.pop('c', 'k')
-        alpha = kwargs.pop('alpha', 0.2)
-        zorder = kwargs.pop('zorder', 10)
-        x_, y_ = self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range)
-        self.ax.plot(x_, y_, ls=ls, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
+        x_, y_ = self._getMeridian(m)
+        self.ax.plot(x_, y_, **kwargs)
 
     def _setEdge(self, **kwargs):
         self._dec_range = np.linspace(-90, 90, self.resolution)
         self._ra_range = np.linspace(-180, 180, self.resolution) + self.proj.ra_0
 
+        # styling: frame needs to be on top of everything, must be transparent
+        facecolor = 'None'
+        zorder = 1000
         lw = kwargs.pop('lw', 1)
-        c = kwargs.pop('c', '#444444')
-        alpha = kwargs.pop('alpha', 1)
-        zorder = kwargs.pop('zorder', 100)
+        edgecolor = kwargs.pop('c', '#444444')
+        # if there is facecolor: clone the polygon and put it in as bottom layer
+        facecolor_ = kwargs.pop('facecolor', None)
 
-        for p in [-90, 90]:
-            self._setParallel(p, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-parallel', **kwargs)
-        for m in [self.proj.ra_0 + 180, self.proj.ra_0 - 180]:
-            self._setMeridian(m, lw=lw, c=c, alpha=alpha, zorder=zorder, gid='edge-meridian', **kwargs)
+        # polygon of the map edge: top, right, bottom, left
+        lines = [self._getParallel(90),] + [self._getMeridian(self.proj.ra_0 + 180),] + [self._getParallel(-90, reverse=True),] + [self._getMeridian(self.proj.ra_0 - 180, reverse=True),]
+        xy = np.concatenate(lines, axis=1).T
+        self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
+        self.ax.add_artist(self._edge)
+
+        if facecolor_ is not None:
+            zorder = -1000
+            edgecolor = 'None'
+            poly = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor_, zorder=zorder, gid="edge-background")
+            self.ax.add_artist(poly)
+
 
     def grid(self, sep=30, parallel_fmt=pmDegFormatter, meridian_fmt=degFormatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self.parallel_fmt = parallel_fmt
@@ -169,10 +182,17 @@ class Map():
         for artist in artists:
                 artist.remove()
 
+        # styling
+        ls = kwargs.pop('ls', '-')
+        lw = kwargs.pop('lw', 0.5)
+        c = kwargs.pop('c', 'k')
+        alpha = kwargs.pop('alpha', 0.2)
+        zorder = kwargs.pop('zorder', 10)
+
         for p in _parallels:
-            self._setParallel(p, gid='grid-parallel-%r' % p, **kwargs)
+            self._setParallel(p, gid='grid-parallel-%r' % p, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
         for m in _meridians:
-            self._setMeridian(m, gid='grid-meridian-%r' % m, **kwargs)
+            self._setMeridian(m, gid='grid-meridian-%r' % m, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
 
     def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
         # gradients in *positive* dec and *negative* ra
@@ -559,7 +579,9 @@ class Map():
             cmap = kwargs.pop("cmap", "None")
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
 
-        return self.ax.hexbin(x, y, C=C, gridsize=gridsize, mincnt=mincnt, cmap=cmap, zorder=zorder, **kwargs)
+        artist = self.ax.hexbin(x, y, C=C, gridsize=gridsize, mincnt=mincnt, cmap=cmap, zorder=zorder, **kwargs)
+        artist.set_clip_path(self._edge)
+        return artist
 
     def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
         x, y = self.proj.transform(ra, dec)
@@ -590,8 +612,8 @@ class Map():
         ra, dec = survey_register[surveyname].load()
 
         x,y  = self.proj.transform(ra, dec)
-        from matplotlib.patches import Polygon
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
+        poly.set_clip_path(self._edge)
         self.ax.add_artist(poly)
         return poly
 
@@ -613,6 +635,7 @@ class Map():
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         coll = PolyCollection(vertices_, array=color, zorder=zorder, **kwargs)
+        coll.set_clip_path(self._edge)
         coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
         self.ax.add_collection(coll)
@@ -703,6 +726,7 @@ class Map():
         _ = kwargs.pop('extend', None)
         zorder = kwargs.pop("zorder", 0) # default for imshow: underneath everything
         artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
+        artist.set_clip_path(self._edge)
         # ... because imshow focusses on extent
         self.ax.set_xlim(xlim_)
         self.ax.set_ylim(ylim_)
@@ -735,7 +759,9 @@ class Map():
         rap, decp = self.proj.invert(xp, yp)
         vp[inside] = rbfi(rap[inside], decp[inside])
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        return self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
+        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
+        artist.set_clip_path(self._edge)
+        return artist
 
 
 ##### Start of free methods #####
@@ -781,62 +807,6 @@ def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     if proj_class is None:
         proj_class = AlbersEqualAreaProjection
     return proj_class(ra0, dec0, dec1, dec2)
-
-def setupConicAxes(ax, ra, dec, proj, pad=0.02):
-    """Set up axes for conic projection.
-
-    The function preconfigures the matplotlib axes and sets the proper x/y
-    limits to show all of ra/dec.
-
-    Args:
-        ax: matplotlib axes
-        ra: list of rectascensions
-        dec: list of declinations
-        proj: a projection instance
-        pad: float, how much padding between data and map boundary
-
-    Returns:
-        None
-    """
-    # remove ticks as they look odd with curved/angled parallels/meridians
-    ax.xaxis.set_tick_params(which='both', length=0)
-    ax.yaxis.set_tick_params(which='both', length=0)
-
-    # determine x/y limits
-    x,y = proj(ra, dec)
-    xmin, xmax = x.min(), x.max()
-    ymin, ymax = y.min(), y.max()
-    delta_xy = (xmax-xmin, ymax-ymin)
-    xmin -= pad*delta_xy[0]
-    xmax += pad*delta_xy[0]
-    ymin -= pad*delta_xy[1]
-    ymax += pad*delta_xy[1]
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(ymin, ymax)
-
-def createConicMap(ax, ra, dec, proj_class=None, ra0=None, dec0=None, pad=0.02, bgcolor='#aaaaaa'):
-    """Create conic projection and set up axes.
-
-    This function constructs a conic projection to optimally hold the
-    ra/dec, see getOptimalConicProjection(),
-    and  preconfigures the matplotlib axes and sets the proper x/y
-    limits to show all of ra/dec.
-
-    Args:
-        ax: matplotlib axes
-        ra: list of rectascensions
-        dec: list of declinations
-        proj: a projection instance, see getOptimalConicProjection()
-        pad: float, how much padding between data and map boundary
-        bgcolor: matplotlib color to be used for ax
-
-    Returns:
-        ConicProjection
-    """
-
-    proj = getOptimalConicProjection(ra, dec, proj_class=proj_class, ra0=ra0, dec0=dec0)
-    setupConicAxes(ax, ra, dec, proj, pad=pad)
-    return proj
 
 
 def makeMapNice(fig, ax, proj, dec, sep=5, bgcolor="#aaaaaa", cb_collection=None, cb_label=""):
