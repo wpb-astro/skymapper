@@ -85,6 +85,15 @@ class BaseProjection(object):
             return ra_
         return ra_[0]
 
+    def _unwrapRA(self, ra):
+        ra_, isArray = _toArray(ra)
+        ra_ = self.ra_0 - ra_
+        ra_ [ra_ < 0] += 360
+        ra_ [ra_ > 360] -= 360
+        if isArray:
+            return ra_
+        return ra_[0]
+
 class Projection(BaseProjection, metaclass=Meta):
     pass
 
@@ -150,7 +159,9 @@ class Albers(Projection):
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        return self.ra_0 - theta/self.n, np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
+        ra = self._unwrapRA(theta/self.n)
+        dec = np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
+        return ra, dec
 
     def __repr__(self):
         return "Albers(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
@@ -223,7 +234,9 @@ class LambertConformalConic(Projection):
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        return self.ra_0 - theta/self.n, (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
+        ra = self._unwrapRA(theta/self.n)
+        dec = (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
+        return ra, dec
 
     def __repr__(self):
         return "LambertConformal(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
@@ -292,7 +305,9 @@ class EquidistantConic(Projection):
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        return self.ra_0 - theta/self.n, (self.G - rho)/ DEG2RAD
+        ra = self._unwrapRA(theta/self.n),
+        dec = (self.G - rho)/ DEG2RAD
+        return ra, dec
 
     def __repr__(self):
         return "Equidistant(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
@@ -323,9 +338,10 @@ class Hammer(Projection):
     def invert(self, x, y):
         dz = x*x/16 + y*y/4
         z = np.sqrt(1- dz)
-        phi = np.arcsin(z*y) / DEG2RAD
-        lmbda = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
-        return self.ra_0 - lmbda, phi
+        dec = np.arcsin(z*y) / DEG2RAD
+        ra = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
+        ra = self._unwrapRA(ra)
+        return ra, dec
 
     def contains(self, x, y):
         dz = x*x/16 + y*y/4
@@ -364,10 +380,11 @@ class HyperElliptical(Projection):
 
         x_, isArray = _toArray(x)
         ra = x_ / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
+        ra = self._unwrapRA(ra)
         if isArray:
-            return  self.ra_0 - ra, dec
+            return  ra, dec
         else:
-            return  self.ra_0 - ra[0], dec[0]
+            return  ra[0], dec[0]
 
     def contains(self, x, y):
         return np.abs(x / np.sqrt(2*np.pi/self.gamma))**self.k + np.abs(y * self.affine)**self.k < self.gamma_pow_k
