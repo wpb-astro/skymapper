@@ -599,6 +599,23 @@ class Map():
 
         return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", clip_on=True, **kwargs)
 
+    def colorbar(self, cb_collection, cb_label="", loc=None):
+        if loc is None:
+            loc = "right"
+        assert loc in ['left', 'right', 'top', 'bottom']
+
+        orientation = "vertical"
+        if loc in ['top', 'bottom']:
+            orientation="horizontal"
+
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(self.ax)
+        cax = divider.append_axes(loc, size="2%", pad=0.1)
+        cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
+        cb.solids.set_edgecolor("face")
+        cb.set_label(cb_label)
+        return cb
+
     def show(self, *args, **kwargs):
         self.fig.show(*args, **kwargs)
 
@@ -640,7 +657,6 @@ class Map():
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         coll = PolyCollection(vertices_, array=color, zorder=zorder, **kwargs)
-        coll.set_clip_path(self._edge)
         coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
         self.ax.add_collection(coll)
