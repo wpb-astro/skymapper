@@ -160,6 +160,11 @@ class Map():
             poly = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor_, zorder=zorder, gid="edge-background")
             self.ax.add_artist(poly)
 
+    def xlim(self):
+        return (self._edge.xy[:, 0].min(), self._edge.xy[:, 0].max())
+
+    def ylim(self):
+        return (self._edge.xy[:, 1].min(), self._edge.xy[:, 1].max())
 
     def grid(self, sep=30, parallel_fmt=pmDegFormatter, meridian_fmt=degFormatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self.parallel_fmt = parallel_fmt
@@ -748,19 +753,26 @@ class Map():
         from scipy.interpolate import Rbf
         rbfi = Rbf(ra, dec, value, norm=skyDistance)
 
-        # TODO: get limits of the map from all x/y data of the edge artists:
-        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
-        xline = np.linspace(xlim[0], xlim[1], resolution)
-        yline = np.linspace(ylim[0], ylim[1], resolution)
+        # make grid in x/y over the limits of the map
+        xlim, ylim = self.xlim(), self.ylim()
+        if resolution % 1 == 0:
+            resolution += 1
+        dx = (xlim[1]-xlim[0])/resolution
+        xline = np.arange(xlim[0], xlim[1], dx) + dx/2 # evaluate center pixel
+        yline = np.arange(ylim[0], ylim[1], dx) + dx/2
         xp, yp = np.meshgrid(xline, yline)
         inside = self.proj.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
 
-        rap, decp = self.proj.invert(xp, yp)
-        vp[inside] = rbfi(rap[inside], decp[inside])
+        rap, decp = self.proj.invert(xp[inside], yp[inside])
+        vp[inside] = rbfi(rap, decp)
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
+        xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
+        artist = self.ax.imshow(vp, extent=(xline[0], xline[-1], yline[0], yline[-1]), zorder=zorder, **kwargs)
         artist.set_clip_path(self._edge)
+        # ... because imshow focusses on extent
+        self.ax.set_xlim(xlim_)
+        self.ax.set_ylim(ylim_)
         return artist
 
 
