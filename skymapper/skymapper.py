@@ -320,7 +320,7 @@ class Map():
 
             self.ax.annotate(self.parallel_fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
-    def labelMeridiansAtFrame(self, loc=None, meridians=None, pad=None, **kwargs):
+    def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, **kwargs):
         assert loc in ['bottom', 'top']
 
         arguments = locals()
@@ -610,39 +610,23 @@ class Map():
 
         return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", clip_on=True, **kwargs)
 
-    def colorbar(self, cb_collection, cb_label="", loc=None):
-        if loc is None:
-            loc = "right"
-        assert loc in ['left', 'right', 'top', 'bottom']
+    def colorbar(self, cb_collection, cb_label="", orientation="vertical", size="2%", pad="1%"):
+        assert orientation in ["vertical", "horizontal"]
 
-        orientation = "vertical"
-        if loc in ['top', 'bottom']:
-            orientation="horizontal"
+        # pick the side that does not have the tick labels
+        if orientation == "vertical":
+            frame_loc = self._set_parallellabelframe_args.get('loc', None)
+        else:
+            frame_loc = self._set_meridianlabelframe_args.get('loc', None)
+        loc = self._negateLoc(frame_loc)
 
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(self.ax)
-        cax = divider.append_axes(loc, size="2%", pad=0)
+        cax = divider.append_axes(loc, size=size, pad=pad)
         cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
         cb.solids.set_edgecolor("face")
         cb.set_label(cb_label)
-
-        # if frame labels are on the same side as colorbar:
-        # move them to the opposite side
-        is_tight = False
-        if loc in ['left', 'right']:
-            if loc == self._set_parallellabelframe_args.get('loc', None):
-                _ = self._set_parallellabelframe_args.pop('loc', None)
-                frame_loc = self._negateLoc(loc)
-                self.labelParallelsAtFrame(loc=frame_loc, **self._set_parallellabelframe_args)
-                is_tight = True
-        elif loc in ['bottom', 'top']:
-            if loc == self._set_meridianlabelframe_args.get('loc', None):
-                _ = self._set_meridianlabelframe_args.pop('loc', None)
-                frame_loc = self._negateLoc(loc)
-                self.labelMeridiansAtFrame(loc=frame_loc, **self._set_meridianlabelframe_args)
-                is_tight = True
-        if not is_tight:
-            self.fig.tight_layout()
+        self.fig.tight_layout()
         return cb
 
     def show(self, *args, **kwargs):
