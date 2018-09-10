@@ -42,7 +42,7 @@ def degFormatter(deg):
     """
     return "$%d^\circ$" % deg
 
-def pmDegFormatter(deg):
+def degPMFormatter(deg):
     """String formatter for "+-%d^\circ"
 
     Args:
@@ -57,6 +57,18 @@ def pmDegFormatter(deg):
     if deg < 0:
         format = "$-$" + format
     return format % np.abs(deg)
+
+def deg360Formatter(deg):
+        """Default formatter for map labels.
+
+        Args:
+            deg: float
+        Returns:
+            string
+        """
+        if deg < 0:
+            deg += 360
+        return "$%d^\circ$" % deg
 
 def hourAngleFormatter(ra):
     """String formatter for "hh:mm"
@@ -153,7 +165,7 @@ class Map():
         facecolor_ = kwargs.pop('facecolor', None)
 
         # polygon of the map edge: top, left, bottom, right
-        # TODO: don't draw +-90 deg parallels for projections where that's a single point
+        # don't poles if that's a single point
         lines = []
         for line in [self._getParallel(90), self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getParallel(-90, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]:
             if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
@@ -175,7 +187,7 @@ class Map():
     def ylim(self):
         return (self._edge.xy[:, 1].min(), self._edge.xy[:, 1].max())
 
-    def grid(self, sep=30, parallel_fmt=pmDegFormatter, meridian_fmt=degFormatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+    def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self.parallel_fmt = parallel_fmt
         self.meridian_fmt = meridian_fmt
         self._dec_range = np.linspace(dec_min, dec_max, self.resolution)
@@ -208,30 +220,6 @@ class Map():
         for m in _meridians:
             self._setMeridian(m, gid='grid-meridian-%r' % m, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
 
-    def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
-        # gradients in *positive* dec and *negative* ra
-        assert direction in ['parallel', 'meridian']
-        correction = 1
-        if direction == 'parallel':
-            testm = np.array([ra+sep/2, ra-sep/2])
-            if testm[0] >= self.proj.ra_0 + 180:
-                testm[0] = ra
-                correction = 2
-            if testm[1] <= self.proj.ra_0 - 180:
-                testm[1] = ra
-                correction = 2
-            x_, y_ = self.proj.transform(testm, np.ones(2)*dec)
-        else:
-            testp = np.array([dec-sep/2, dec+sep/2])
-            if testp[0] <= -90:
-                testp[0] = dec
-                correction = 2
-            if testp[1] >= 90:
-                testp[1] = dec
-                correction = 2
-            x_, y_ = self.proj.transform(np.ones(2)*ra, testp)
-        return np.array((x_[1] - x_[0], y_[1] - y_[0])) * correction
-
     def _negateLoc(self, loc):
         if loc == "bottom":
             return "top"
@@ -262,7 +250,7 @@ class Map():
         # determine rot_base so that central label is upright
         if rotation is None:
             m = self.proj.ra_0
-            dxy = self.gradient(m, p, direction=direction)
+            dxy = self.proj.gradient(m, p, direction=direction)
             angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
             options = np.arange(-2,3) * 90 # multiples of 90 deg
             closest = np.argmin(np.abs(options - angle))
@@ -274,19 +262,16 @@ class Map():
         for m in meridians:
             # move label along meridian
             xp, yp = self.proj.transform(m, p)
-            dxy = self.gradient(m, p, direction="meridian")
+            dxy = self.proj.gradient(m, p, direction="meridian")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if loc == 'bottom':
                 dxy *= -1
 
             if rotation is None:
-                dxy_ = self.gradient(m, p, direction=direction)
+                dxy_ = self.proj.gradient(m, p, direction=direction)
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
             else:
                 angle = rotation
-
-            if m < 0:
-                m += 360
 
             self.ax.annotate(self.meridian_fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
@@ -310,7 +295,7 @@ class Map():
         # determine rot_base so that central label is upright
         if rotation is None:
             p = 0
-            dxy = self.gradient(m, p, direction=direction)
+            dxy = self.proj.gradient(m, p, direction=direction)
             angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
             options = np.arange(-2,3) * 90
             closest = np.argmin(np.abs(options - angle))
@@ -322,13 +307,13 @@ class Map():
         for p in parallels:
             # move label along parallel
             xp, yp = self.proj.transform(m, p)
-            dxy = self.gradient(m, p, direction="parallel")
+            dxy = self.proj.gradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if loc == 'left':
                 dxy *= -1
 
             if rotation is None:
-                dxy_ = self.gradient(m, p, direction=direction)
+                dxy_ = self.proj.gradient(m, p, direction=direction)
                 angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
             else:
                 angle = rotation
@@ -386,7 +371,7 @@ class Map():
                     xm_at_ylim = extrap(ylim, ym, xm)[pos]
                     if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.proj.contains(xm_at_ylim, ylim[pos]):
                         m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
-                        dxy = self.gradient(m_, p_, direction="meridian")
+                        dxy = self.proj.gradient(m_, p_, direction="meridian")
                         dxy /= np.sqrt((dxy**2).sum())
                         dxy *= pad / dxy[1] # same pad from frame
                         if loc == "bottom":
@@ -395,9 +380,6 @@ class Map():
 
                         x_im = (xm_at_ylim - xlim[0])/(xlim[1]-xlim[0])
                         y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
-
-                        if m < 0:
-                            m += 360
 
                         # these are set as annotations instead of simple axis ticks
                         # because those cannot be shifted by a constant point amount to
@@ -455,7 +437,7 @@ class Map():
                     yp_at_xlim = extrap(xlim, xp, yp)[pos]
                     if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.proj.contains(xlim[pos], yp_at_xlim):
                         m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
-                        dxy = self.gradient(m_, p_, direction='parallel')
+                        dxy = self.proj.gradient(m_, p_, direction='parallel')
                         dxy /= np.sqrt((dxy**2).sum())
                         dxy *= pad / dxy[0] # same pad from frame
                         if loc == "left":
@@ -621,7 +603,7 @@ class Map():
         x, y = self.proj.transform(ra, dec)
 
         if rotation is None:
-            dxy_ = self.gradient(ra, dec, direction=direction)
+            dxy_ = self.proj.gradient(ra, dec, direction=direction)
             angle = 90-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
         else:
             angle = rotation

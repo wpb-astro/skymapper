@@ -75,6 +75,35 @@ class BaseProjection(object):
         """
         pass
 
+    def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
+        # gradients in *positive* dec and *negative* ra
+        assert direction in ['parallel', 'meridian']
+        correction = 1
+        if direction == 'parallel':
+            testm = np.array([ra+sep/2, ra-sep/2])
+            if testm[0] >= self.ra_0 + 180:
+                testm[0] = ra
+                correction = 2
+            if testm[1] <= self.ra_0 - 180:
+                testm[1] = ra
+                correction = 2
+            x_, y_ = self.transform(testm, np.ones(2)*dec)
+        else:
+            testp = np.array([dec-sep/2, dec+sep/2])
+            if testp[0] <= -90:
+                testp[0] = dec
+                correction = 2
+            if testp[1] >= 90:
+                testp[1] = dec
+                correction = 2
+            x_, y_ = self.transform(np.ones(2)*ra, testp)
+        return np.array((x_[1] - x_[0], y_[1] - y_[0])) * correction / sep
+
+    def jacobian(self, ra, dec, sep=1e-2):
+        dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
+        dxy_ddec = self.gradient(ra, dec, sep=sep, direction='meridian')
+        return np.array((dxy_dra, dxy_dec)).T
+
     def _wrapRA(self, ra):
         ra_, isArray = _toArray(ra)
         ra_ = self.ra_0 - ra_ # inverse for RA
