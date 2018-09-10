@@ -91,14 +91,18 @@ class Map():
             self.ax.set_aspect('equal')
             self.fig = self.ax.get_figure()
         self.ax.set_axis_off()
-        self.ax.xaxis.set_ticks([])
-        self.ax.yaxis.set_ticks([])
+        # do not unset the x/y ticks by e.g. xticks([]), we need them for tight_layout
+        self.ax.xaxis.set_ticks_position('none')
+        self.ax.yaxis.set_ticks_position('none')
+        self.fig.tight_layout()
+
+        self._set_frame_args = {}
+        self._set_meridianlabelframe_args = {}
+        self._set_parallellabelframe_args = {}
 
         # attach event handlers
         if interactive:
-            self._set_frame_args = {}
-            self._set_meridianlabelframe_args = {}
-            self._set_parallellabelframe_args = {}
+            self.fig.show()
             self._press_evt = self.fig.canvas.mpl_connect('button_press_event', self._pressHandler)
             self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._releaseHandler)
             self._scroll_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
@@ -149,7 +153,8 @@ class Map():
         facecolor_ = kwargs.pop('facecolor', None)
 
         # polygon of the map edge: top, right, bottom, left
-        lines = [self._getParallel(90),] + [self._getMeridian(self.proj.ra_0 + 180),] + [self._getParallel(-90, reverse=True),] + [self._getMeridian(self.proj.ra_0 - 180, reverse=True),]
+        # TODO: don't draw +-90 deg parallels for projections where that's a single point
+        lines = [self._getParallel(90),] + [self._getMeridian(self.proj.ra_0 + 180),]  + [self._getParallel(-90, reverse=True),] +  [self._getMeridian(self.proj.ra_0 - 180, reverse=True),]
         xy = np.concatenate(lines, axis=1).T
         self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
         self.ax.add_artist(self._edge)
@@ -327,79 +332,101 @@ class Map():
             self.ax.annotate(self.parallel_fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
 
     def labelMeridiansAtFrame(self, loc=None, meridians=None, pad=None, **kwargs):
-        self._set_meridianlabelframe_args = locals()
-        self._set_meridianlabelframe_args.pop('self')
-        for k,v in self._set_meridianlabelframe_args.pop('kwargs'):
-            self._set_meridianlabelframe_args[k]=v
+        assert loc in ['bottom', 'top']
 
-        locs = ['top', 'bottom']
-        if loc is not None:
-            assert loc in locs
-            locs = [loc]
+        arguments = locals()
+        arguments.pop('self')
+        for k,v in arguments.pop('kwargs'):
+            arguments[k]=v
 
-        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
-        horizontalalignment = kwargs.pop('horizontalalignment', 'center')
-        _ = kwargs.pop('verticalalignment', None) # no option along the frame
+        # need extra space for tight_layout to consider the frame annnotations
+        # we can't get the actual width, but we can make use the of the default width of the axes tick labels
+        if loc != self._set_meridianlabelframe_args.get('loc', None):
+            self.ax.xaxis.set_ticks_position(loc)
+            self.ax.xaxis.set_label_position(loc)
+            # remove existing
+            frame_artists = self.artists('frame-meridian-label')
+            for artist in frame_artists:
+                artist.remove()
+            self.fig.tight_layout()
+
+        # save for interactice updates
+        self._set_meridianlabelframe_args = arguments
+
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
+        zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
+        horizontalalignment = kwargs.pop('horizontalalignment', 'center')
+        verticalalignment = self._negateLoc(loc) # no option along the frame
+        _ = kwargs.pop('verticalalignment', None)
+
         if pad is None:
             pad = size / 3
 
         if meridians is None:
             meridians = self.meridians
 
-        poss = {"bottom": 0, "top": 1}
-
         # check if loc has frame
+        poss = {"bottom": 0, "top": 1}
+        pos = poss[loc]
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
         frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
-        for loc in locs:
-            pos = poss[loc]
-            zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
-            verticalalignment = self._negateLoc(loc) # no option along the frame
+        if loc in frame_locs:
+            # find all parallel grid lines
+            m_artists = self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
+            for c,match in m_artists:
+                m = float(match.group(1))
+                if m in meridians:
+                    # intersect with axis
+                    xm, ym = c.get_xdata(), c.get_ydata()
+                    xm_at_ylim = extrap(ylim, ym, xm)[pos]
+                    if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.proj.contains(xm_at_ylim, ylim[pos]):
+                        m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
+                        dxy = self.gradient(m_, p_, direction="meridian")
+                        dxy /= np.sqrt((dxy**2).sum())
+                        dxy *= pad / dxy[1] # same pad from frame
+                        if loc == "bottom":
+                            dxy *= -1
+                        angle = 0 # no option along the frame
 
-            if loc in frame_locs:
-                # find all parallel grid lines
-                m_artists = self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
-                for c,match in m_artists:
-                    m = float(match.group(1))
-                    if m in meridians:
-                        # intersect with axis
-                        xm, ym = c.get_xdata(), c.get_ydata()
-                        xm_at_ylim = extrap(ylim, ym, xm)[pos]
-                        if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.proj.contains(xm_at_ylim, ylim[pos]):
-                            m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
-                            dxy = self.gradient(m_, p_, direction="meridian")
-                            dxy /= np.sqrt((dxy**2).sum())
-                            dxy *= pad / dxy[1] # same pad from frame
-                            if loc == "bottom":
-                                dxy *= -1
-                            angle = 0 # no option along the frame
+                        x_im = (xm_at_ylim - xlim[0])/(xlim[1]-xlim[0])
+                        y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
 
-                            x_im = (xm_at_ylim - xlim[0])/(xlim[1]-xlim[0])
-                            y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
+                        if m < 0:
+                            m += 360
 
-                            if m < 0:
-                                m += 360
+                        # these are set as annotations instead of simple axis ticks
+                        # because those cannot be shifted by a constant point amount to
+                        # follow the graticule
+                        self.ax.annotate(self.meridian_fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
-                            self.ax.annotate(self.meridian_fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+    def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, **kwargs):
+        assert loc in ['left', 'right']
 
-    def labelParallelsAtFrame(self, loc=None, parallels=None, pad=None, **kwargs):
+        arguments = locals()
+        arguments.pop('self')
+        for k,v in arguments.pop('kwargs'):
+            arguments[k]=v
 
-        self._set_parallellabelframe_args = locals()
-        self._set_parallellabelframe_args.pop('self')
-        for k,v in self._set_parallellabelframe_args.pop('kwargs'):
-            self._set_parallellabelframe_args[k]=v
+        # need extra space for tight_layout to consider the frame annnotations
+        # we can't get the actual width, but we can make use the of the default width of the axes tick labels
+        if loc != self._set_parallellabelframe_args.get('loc', None):
+            self.ax.yaxis.set_ticks_position(loc)
+            self.ax.yaxis.set_label_position(loc)
+            # remove existing
+            frame_artists = self.artists('frame-parallel-label')
+            for artist in frame_artists:
+                artist.remove()
+            self.fig.tight_layout()
 
-        locs = ['left', 'right']
-        if loc is not None:
-            assert loc in locs
-            locs = [loc]
-
-        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        # save for interactice updates
+        self._set_parallellabelframe_args = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
+        zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
         verticalalignment = kwargs.pop('verticalalignment', 'center')
-        _ = kwargs.pop('horizontalalignment', None) # no option along the frame
+        horizontalalignment = self._negateLoc(loc) # no option along the frame
+        _ = kwargs.pop('horizontalalignment', None)
 
         if pad is None:
             pad = size / 3
@@ -407,38 +434,36 @@ class Map():
         if parallels is None:
             parallels = self.parallels
 
-        poss = {"left": 0, "right": 1}
-
         # check if loc has frame
+        poss = {"left": 0, "right": 1}
+        pos = poss[loc]
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
         frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
-        for loc in locs:
-            pos = poss[loc]
-            zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
-            horizontalalignment = self._negateLoc(loc) # no option along the frame
+        if loc in frame_locs:
+            # find all parallel grid lines
+            m_artists = self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
+            for c,match in m_artists:
+                p = float(match.group(1))
+                if p in parallels:
+                    # intersect with axis
+                    xp, yp = c.get_xdata(), c.get_ydata()
+                    yp_at_xlim = extrap(xlim, xp, yp)[pos]
+                    if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.proj.contains(xlim[pos], yp_at_xlim):
+                        m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
+                        dxy = self.gradient(m_, p_, direction='parallel')
+                        dxy /= np.sqrt((dxy**2).sum())
+                        dxy *= pad / dxy[0] # same pad from frame
+                        if loc == "left":
+                            dxy *= -1
+                        angle = 0 # no option along the frame
 
-            if loc in frame_locs:
-                # find all parallel grid lines
-                m_artists = self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
-                for c,match in m_artists:
-                    p = float(match.group(1))
-                    if p in parallels:
-                        # intersect with axis
-                        xp, yp = c.get_xdata(), c.get_ydata()
-                        yp_at_xlim = extrap(xlim, xp, yp)[pos]
-                        if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.proj.contains(xlim[pos], yp_at_xlim):
-                            m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
-                            dxy = self.gradient(m_, p_, direction='parallel')
-                            dxy /= np.sqrt((dxy**2).sum())
-                            dxy *= pad / dxy[0] # same pad from frame
-                            if loc == "left":
-                                dxy *= -1
-                            angle = 0 # no option along the frame
-
-                            x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
-                            y_im = (yp_at_xlim - ylim[0])/(ylim[1]-ylim[0])
-                            self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
-
+                        x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
+                        y_im = (yp_at_xlim - ylim[0])/(ylim[1]-ylim[0])
+                        # these are set as annotations instead of simple axis ticks
+                        # because those cannot be shifted by a constant point amount to
+                        # follow the graticule
+                        self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
     def _setFrame(self, precision=1000):
         # remember function arguments to recreate
@@ -529,6 +554,12 @@ class Map():
         self._clearFrame()
         self.fig.canvas.draw()
 
+    def _releaseHandler(self, evt):
+        if evt.button != 1: return
+        if evt.dblclick: return
+        self._resetFrame()
+        self.fig.canvas.draw()
+
     def _scrollHandler(self, evt):
         # mouse scroll for zoom
         if evt.inaxes != self.ax: return
@@ -549,12 +580,6 @@ class Map():
 
         self.ax.set_xlim(xlim_, xlim__)
         self.ax.set_ylim(ylim_, ylim__)
-        self._resetFrame()
-        self.fig.canvas.draw()
-
-    def _releaseHandler(self, evt):
-        if evt.button != 1: return
-        if evt.dblclick: return
         self._resetFrame()
         self.fig.canvas.draw()
 
@@ -610,10 +635,28 @@ class Map():
 
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(self.ax)
-        cax = divider.append_axes(loc, size="2%", pad=0.1)
+        cax = divider.append_axes(loc, size="2%", pad=0)
         cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
         cb.solids.set_edgecolor("face")
         cb.set_label(cb_label)
+
+        # if frame labels are on the same side as colorbar:
+        # move them to the opposite side
+        is_tight = False
+        if loc in ['left', 'right']:
+            if loc == self._set_parallellabelframe_args.get('loc', None):
+                _ = self._set_parallellabelframe_args.pop('loc', None)
+                frame_loc = self._negateLoc(loc)
+                self.labelParallelsAtFrame(loc=frame_loc, **self._set_parallellabelframe_args)
+                is_tight = True
+        elif loc in ['bottom', 'top']:
+            if loc == self._set_meridianlabelframe_args.get('loc', None):
+                _ = self._set_meridianlabelframe_args.pop('loc', None)
+                frame_loc = self._negateLoc(loc)
+                self.labelMeridiansAtFrame(loc=frame_loc, **self._set_meridianlabelframe_args)
+                is_tight = True
+        if not is_tight:
+            self.fig.tight_layout()
         return cb
 
     def show(self, *args, **kwargs):
