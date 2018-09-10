@@ -152,9 +152,13 @@ class Map():
         # if there is facecolor: clone the polygon and put it in as bottom layer
         facecolor_ = kwargs.pop('facecolor', None)
 
-        # polygon of the map edge: top, right, bottom, left
+        # polygon of the map edge: top, left, bottom, right
         # TODO: don't draw +-90 deg parallels for projections where that's a single point
-        lines = [self._getParallel(90),] + [self._getMeridian(self.proj.ra_0 + 180),]  + [self._getParallel(-90, reverse=True),] +  [self._getMeridian(self.proj.ra_0 - 180, reverse=True),]
+        lines = []
+        for line in [self._getParallel(90), self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getParallel(-90, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]:
+            if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
+                lines.append(line)
+
         xy = np.concatenate(lines, axis=1).T
         self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
         self.ax.add_artist(self._edge)
