@@ -86,9 +86,18 @@ def hourAngleFormatter(ra):
     minutes = '{:>02}'.format(minutes)
     return "%d:%sh" % (hours, minutes)
 
+def _parseArgs(locals):
+    # turn list of arguments (all named or kwargs) into lfat dictionary
+    locals.pop('self')
+    kwargs = locals.pop('kwargs', {})
+    for k,v in kwargs.items():
+        locals[k] = v
+    return locals
 
 class Map():
     def __init__(self, proj, ax=None, resolution=75, interactive=True, **kwargs):
+        # store arguments to regenerate the map
+        self._config = {'__init__': _parseArgs(locals())}
         self.proj = proj
         self.resolution = resolution
         self._setFigureAx(ax, interactive=interactive)
@@ -107,10 +116,6 @@ class Map():
         self.ax.xaxis.set_ticks_position('none')
         self.ax.yaxis.set_ticks_position('none')
         self.fig.tight_layout()
-
-        self._set_frame_args = {}
-        self._set_meridianlabelframe_args = {}
-        self._set_parallellabelframe_args = {}
 
         # attach event handlers
         if interactive:
@@ -188,6 +193,7 @@ class Map():
         return (self._edge.xy[:, 1].min(), self._edge.xy[:, 1].max())
 
     def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+        self._config['grid'] = _parseArgs(locals())
         self.parallel_fmt = parallel_fmt
         self.meridian_fmt = meridian_fmt
         self._dec_range = np.linspace(dec_min, dec_max, self.resolution)
@@ -231,6 +237,11 @@ class Map():
             return "left"
 
     def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+        arguments = _parseArgs(locals())
+        myname = 'labelMeridianAtParallel'
+        if myname not in self._config:
+            self._config[myname] = []
+        self._config[myname].append(arguments)
 
         if loc is None:
             if p >= 0:
@@ -276,6 +287,11 @@ class Map():
             self.ax.annotate(self.meridian_fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+        arguments = _parseArgs(locals())
+        myname = 'labelParallelAtMeridian'
+        if myname not in self._config:
+            self._config[myname] = []
+        self._config[myname].append(arguments)
 
         if loc is None:
             if m <= 0:
@@ -323,14 +339,11 @@ class Map():
     def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, **kwargs):
         assert loc in ['bottom', 'top']
 
-        arguments = locals()
-        arguments.pop('self')
-        for k,v in arguments.pop('kwargs'):
-            arguments[k]=v
-
+        arguments = _parseArgs(locals())
+        myname = 'labelMeridiansAtFrame'
         # need extra space for tight_layout to consider the frame annnotations
         # we can't get the actual width, but we can make use the of the default width of the axes tick labels
-        if loc != self._set_meridianlabelframe_args.get('loc', None):
+        if myname not in self._config or self._config[myname]['loc'] != loc:
             self.ax.xaxis.set_ticks_position(loc)
             self.ax.xaxis.set_label_position(loc)
             # remove existing
@@ -338,9 +351,7 @@ class Map():
             for artist in frame_artists:
                 artist.remove()
             self.fig.tight_layout()
-
-        # save for interactice updates
-        self._set_meridianlabelframe_args = arguments
+        self._config[myname] = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
@@ -389,14 +400,11 @@ class Map():
     def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, **kwargs):
         assert loc in ['left', 'right']
 
-        arguments = locals()
-        arguments.pop('self')
-        for k,v in arguments.pop('kwargs'):
-            arguments[k]=v
-
+        arguments = _parseArgs(locals())
+        myname = 'labelParallelsAtFrame'
         # need extra space for tight_layout to consider the frame annnotations
         # we can't get the actual width, but we can make use the of the default width of the axes tick labels
-        if loc != self._set_parallellabelframe_args.get('loc', None):
+        if myname not in self._config or self._config[myname]['loc'] != loc:
             self.ax.yaxis.set_ticks_position(loc)
             self.ax.yaxis.set_label_position(loc)
             # remove existing
@@ -404,9 +412,7 @@ class Map():
             for artist in frame_artists:
                 artist.remove()
             self.fig.tight_layout()
-
-        # save for interactice updates
-        self._set_parallellabelframe_args = arguments
+        self._config[myname] = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
@@ -451,11 +457,7 @@ class Map():
                         # follow the graticule
                         self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
 
-    def _setFrame(self, precision=1000):
-        # remember function arguments to recreate
-        self._set_frame_args = locals()
-        self._set_frame_args.pop('self')
-
+    def _setFrame(self):
         # clean up existing frame
         frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         for c,m in frame_artists:
@@ -466,6 +468,7 @@ class Map():
 
         for loc in locs:
             # define line along axis
+            precision = 1000
             const = np.ones(precision)
             if loc == "left":
                 line = xlim[0]*const, np.linspace(ylim[0], ylim[1], precision)
@@ -529,9 +532,9 @@ class Map():
             artist.remove()
 
     def _resetFrame(self):
-        self._setFrame(**self._set_frame_args)
-        self.labelMeridiansAtFrame(**self._set_meridianlabelframe_args)
-        self.labelParallelsAtFrame(**self._set_parallellabelframe_args)
+        self._setFrame()
+        for method in ['labelMeridiansAtFrame', 'labelParallelsAtFrame']:
+            getattr(self, method)(**self._config[method])
 
     def _pressHandler(self, evt):
         if evt.button != 1: return
@@ -615,9 +618,9 @@ class Map():
 
         # pick the side that does not have the tick labels
         if orientation == "vertical":
-            frame_loc = self._set_parallellabelframe_args.get('loc', None)
+            frame_loc = self._config['labelParallelsAtFrame']['loc']
         else:
-            frame_loc = self._set_meridianlabelframe_args.get('loc', None)
+            frame_loc = self._config['labelMeridiansAtFrame']['loc']
         loc = self._negateLoc(frame_loc)
 
         from mpl_toolkits.axes_grid1 import make_axes_locatable
