@@ -124,6 +124,30 @@ class Map():
             self._release_evt = self.fig.canvas.mpl_connect('button_release_event', self._releaseHandler)
             self._scroll_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
 
+    def clone(self, ax=None):
+        args = dict(self._config)
+        init_args = args.pop('__init__')
+        init_args['ax'] = ax
+        map = Map(**init_args)
+
+        map.ax.set_xlim(self.ax.get_xlim())
+        map.ax.set_ylim(self.ax.get_ylim())
+        map._setFrame()
+
+        meridian_args = args.pop('labelMeridianAtParallel')
+        parallel_args = args.pop('labelParallelAtMeridian')
+        for method in args.keys():
+            getattr(map, method)(**args[method])
+
+        for args in meridian_args:
+            map.labelMeridianAtParallel(**args)
+
+        for args in parallel_args:
+            map.labelParallelAtMeridian(**args)
+
+        map.fig.tight_layout()
+        return map
+
     @property
     def parallels(self):
         return [ float(m.group(1)) for c,m in self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True) ]
