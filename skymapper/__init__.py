@@ -11,6 +11,11 @@ from . import survey
 from .map import *
 from .projection import *
 
+def loadMap(surveyname, ax=None):
+    survey = survey_register[surveyname]
+    return Map.load(survey.get_configfile(), ax=ax)
+
+
 def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     """Determine optimal configuration of conic map.
 

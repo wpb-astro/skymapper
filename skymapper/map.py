@@ -698,8 +698,8 @@ class Map():
             surveyname: name of the survey
             **kwargs: matplotlib.collections.PolyCollection keywords
         """
-        # construct survey loader class and call it
-        ra, dec = survey_register[surveyname].load()
+        # search for survey in register
+        ra, dec = survey_register[surveyname].get_footprint()
 
         x,y  = self.proj.transform(ra, dec)
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)

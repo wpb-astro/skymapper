@@ -12,14 +12,22 @@ class Meta(type):
 
 class BaseSurvey(object):
     @staticmethod
-    def load():
+    def get_configfile():
+        pass
+
+    @staticmethod
+    def get_footprint():
         pass
 
 class Survey(BaseSurvey, metaclass=Meta):
     pass
 
 class DES(Survey):
-    def load():
+    # def get_configfile():
+    #     this_dir, this_filename = os.path.split(__file__)
+    #     return os.path.join(this_dir, "des.pkl")
+
+    def get_footprint():
         """Returns RA, Dec of the survey footprint."""
         this_dir, this_filename = os.path.split(__file__)
         datafile = os.path.join(this_dir, "des-round17-poly.txt")
