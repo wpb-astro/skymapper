@@ -25,5 +25,3 @@ class DES(Survey):
         datafile = os.path.join(this_dir, "des-round17-poly.txt")
         data = np.loadtxt(datafile)
         return data[:,0], data[:,1]
-
-#register_survey(DES)
