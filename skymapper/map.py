@@ -3,6 +3,7 @@ import numpy as np
 import re, pickle
 from . import healpix
 from . import survey_register
+from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
 
 DEG2RAD = np.pi/180
@@ -102,6 +103,8 @@ class Map():
         self.resolution = resolution
         self._setFigureAx(ax, interactive=interactive)
         self._setEdge(**kwargs)
+        self._setFrame()
+        self.fig.tight_layout()
 
     def _setFigureAx(self, ax=None, interactive=True):
         if ax is None:
@@ -202,12 +205,16 @@ class Map():
         return self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range[::-1])
 
     def _setParallel(self, p, **kwargs):
-        x_, y_ = self._getParallel(p)
-        self.ax.plot(x_, y_, **kwargs)
+        x, y = self._getParallel(p)
+        artist = Line2D(x, y, **kwargs)
+        self.ax.add_artist(artist)
+        return artist
 
     def _setMeridian(self, m, **kwargs):
-        x_, y_ = self._getMeridian(m)
-        self.ax.plot(x_, y_, **kwargs)
+        x, y = self._getMeridian(m)
+        artist = Line2D(x, y, **kwargs)
+        self.ax.add_artist(artist)
+        return artist
 
     def _setEdge(self, **kwargs):
         self._dec_range = np.linspace(-90, 90, self.resolution)
