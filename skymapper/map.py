@@ -126,16 +126,16 @@ class Map():
 
     def clone(self, ax=None):
         config = dict(self._config)
-        config['xlim'] = self.xlim()
-        config['ylim'] = self.ylim()
+        config['xlim'] = self.ax.get_xlim()
+        config['ylim'] = self.ax.get_ylim()
         return Map._create(config)
 
     def save(self, filename):
         try:
             with open(filename, 'wb') as fp:
                 config = dict(self._config)
-                config['xlim'] = self.xlim()
-                config['ylim'] = self.ylim()
+                config['xlim'] = self.ax.get_xlim()
+                config['ylim'] = self.ax.get_ylim()
                 pickle.dump(config, fp)
         except IOError as e:
             raise
@@ -291,7 +291,7 @@ class Map():
     def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
         arguments = _parseArgs(locals())
         myname = 'labelMeridianAtParallel'
-        if myname not in self._config:
+        if myname not in self._config.keys():
             self._config[myname] = []
         self._config[myname].append(arguments)
 
@@ -341,7 +341,7 @@ class Map():
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
         arguments = _parseArgs(locals())
         myname = 'labelParallelAtMeridian'
-        if myname not in self._config:
+        if myname not in self._config.keys():
             self._config[myname] = []
         self._config[myname].append(arguments)
 
@@ -395,7 +395,7 @@ class Map():
         myname = 'labelMeridiansAtFrame'
         # need extra space for tight_layout to consider the frame annnotations
         # we can't get the actual width, but we can make use the of the default width of the axes tick labels
-        if myname not in self._config or self._config[myname]['loc'] != loc:
+        if myname not in self._config.keys() or self._config[myname]['loc'] != loc:
             self.ax.xaxis.set_ticks_position(loc)
             self.ax.xaxis.set_label_position(loc)
             # remove existing
@@ -456,7 +456,7 @@ class Map():
         myname = 'labelParallelsAtFrame'
         # need extra space for tight_layout to consider the frame annnotations
         # we can't get the actual width, but we can make use the of the default width of the axes tick labels
-        if myname not in self._config or self._config[myname]['loc'] != loc:
+        if myname not in self._config.keys() or self._config[myname]['loc'] != loc:
             self.ax.yaxis.set_ticks_position(loc)
             self.ax.yaxis.set_label_position(loc)
             # remove existing
