@@ -103,6 +103,10 @@ class Map():
         self.resolution = resolution
         self._setFigureAx(ax, interactive=interactive)
         self._setEdge(**kwargs)
+        if ax is None:
+            self.ax.relim()
+            self.ax.autoscale_view()
+            print (self.ax.get_xlim())
         self._setFrame()
         self.fig.tight_layout()
 
@@ -207,13 +211,13 @@ class Map():
     def _setParallel(self, p, **kwargs):
         x, y = self._getParallel(p)
         artist = Line2D(x, y, **kwargs)
-        self.ax.add_artist(artist)
+        self.ax.add_line(artist)
         return artist
 
     def _setMeridian(self, m, **kwargs):
         x, y = self._getMeridian(m)
         artist = Line2D(x, y, **kwargs)
-        self.ax.add_artist(artist)
+        self.ax.add_line(artist)
         return artist
 
     def _setEdge(self, **kwargs):
@@ -237,13 +241,13 @@ class Map():
 
         xy = np.concatenate(lines, axis=1).T
         self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
-        self.ax.add_artist(self._edge)
+        self.ax.add_patch(self._edge)
 
         if facecolor_ is not None:
             zorder = -1000
             edgecolor = 'None'
             poly = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor_, zorder=zorder, gid="edge-background")
-            self.ax.add_artist(poly)
+            self.ax.add_patch(poly)
 
     def xlim(self):
         return (self._edge.xy[:, 0].min(), self._edge.xy[:, 0].max())
@@ -593,7 +597,8 @@ class Map():
     def _resetFrame(self):
         self._setFrame()
         for method in ['labelMeridiansAtFrame', 'labelParallelsAtFrame']:
-            getattr(self, method)(**self._config[method])
+            if method in self._config.keys():
+                getattr(self, method)(**self._config[method])
 
     def _pressHandler(self, evt):
         if evt.button != 1: return
@@ -711,7 +716,7 @@ class Map():
         x,y  = self.proj.transform(ra, dec)
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
         poly.set_clip_path(self._edge)
-        self.ax.add_artist(poly)
+        self.ax.add_patch(poly)
         return poly
 
     def vertex(self, vertices, color=None, vmin=None, vmax=None, **kwargs):
