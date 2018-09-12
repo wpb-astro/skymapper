@@ -102,7 +102,7 @@ class BaseProjection(object):
     def jacobian(self, ra, dec, sep=1e-2):
         dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
         dxy_ddec = self.gradient(ra, dec, sep=sep, direction='meridian')
-        return np.array((dxy_dra, dxy_dec)).T
+        return np.array((dxy_dra, dxy_ddec)).T
 
     def _wrapRA(self, ra):
         ra_, isArray = _toArray(ra)

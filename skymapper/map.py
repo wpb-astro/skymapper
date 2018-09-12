@@ -106,9 +106,8 @@ class Map():
         if ax is None:
             self.ax.relim()
             self.ax.autoscale_view()
-            print (self.ax.get_xlim())
         self._setFrame()
-        self.fig.tight_layout()
+        self.fig.tight_layout(pad=0.5)
 
     def _setFigureAx(self, ax=None, interactive=True):
         if ax is None:
@@ -122,7 +121,6 @@ class Map():
         # do not unset the x/y ticks by e.g. xticks([]), we need them for tight_layout
         self.ax.xaxis.set_ticks_position('none')
         self.ax.yaxis.set_ticks_position('none')
-        self.fig.tight_layout()
 
         # attach event handlers
         if interactive:
@@ -180,7 +178,7 @@ class Map():
         for args in parallel_args:
             map.labelParallelAtMeridian(**args)
 
-        map.fig.tight_layout()
+        map.fig.tight_layout(pad=0.5)
         return map
 
     @property
@@ -228,7 +226,7 @@ class Map():
         facecolor = 'None'
         zorder = 1000
         lw = kwargs.pop('lw', 1)
-        edgecolor = kwargs.pop('c', '#444444')
+        edgecolor = kwargs.pop('edgecolor', 'k')
         # if there is facecolor: clone the polygon and put it in as bottom layer
         facecolor_ = kwargs.pop('facecolor', None)
 
@@ -277,12 +275,12 @@ class Map():
         for artist in artists:
                 artist.remove()
 
-        # styling
+        # styling: based on edge
         ls = kwargs.pop('ls', '-')
-        lw = kwargs.pop('lw', 0.5)
-        c = kwargs.pop('c', 'k')
+        lw = kwargs.pop('lw', self._edge.get_linewidth() / 2)
+        c = kwargs.pop('c', self._edge.get_edgecolor())
         alpha = kwargs.pop('alpha', 0.2)
-        zorder = kwargs.pop('zorder', 10)
+        zorder = kwargs.pop('zorder', self._edge.get_zorder() - 1)
 
         for p in _parallels:
             self._setParallel(p, gid='grid-parallel-%r' % p, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
@@ -318,6 +316,11 @@ class Map():
         zorder = kwargs.pop('zorder', 20)
         rotation = kwargs.pop('rotation', None)
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
+        # styling consistent with frame, i.e. with edge
+        color = kwargs.pop('color', self._edge.get_edgecolor())
+        alpha = kwargs.pop('alpha', self._edge.get_alpha())
+        zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
+
         if pad is None:
             pad = size / 3
 
@@ -347,7 +350,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self.meridian_fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder, gid='meridian-label', **kwargs)
+            self.ax.annotate(self.meridian_fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='meridian-label', **kwargs)
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
         arguments = _parseArgs(locals())
@@ -368,6 +371,11 @@ class Map():
         zorder = kwargs.pop('zorder', 20)
         rotation = kwargs.pop('rotation', None)
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
+        # styling consistent with frame, i.e. with edge
+        color = kwargs.pop('color', self._edge.get_edgecolor())
+        alpha = kwargs.pop('alpha', self._edge.get_alpha())
+        zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
+
         if pad is None:
             pad = size / 3
 
@@ -397,7 +405,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self.parallel_fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  gid='parallel-label', **kwargs)
+            self.ax.annotate(self.parallel_fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='parallel-label', **kwargs)
 
     def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, **kwargs):
         assert loc in ['bottom', 'top']
@@ -413,11 +421,14 @@ class Map():
             frame_artists = self.artists('frame-meridian-label')
             for artist in frame_artists:
                 artist.remove()
-            self.fig.tight_layout()
+            self.fig.tight_layout(pad=0.5)
         self._config[myname] = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
-        zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
+        # styling consistent with frame, i.e. with edge
+        color = kwargs.pop('color', self._edge.get_edgecolor())
+        alpha = kwargs.pop('alpha', self._edge.get_alpha())
+        zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
         horizontalalignment = kwargs.pop('horizontalalignment', 'center')
         verticalalignment = self._negateLoc(loc) # no option along the frame
         _ = kwargs.pop('verticalalignment', None)
@@ -458,7 +469,7 @@ class Map():
                         # these are set as annotations instead of simple axis ticks
                         # because those cannot be shifted by a constant point amount to
                         # follow the graticule
-                        self.ax.annotate(self.meridian_fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False,  gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                        self.ax.annotate(self.meridian_fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
 
     def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, **kwargs):
         assert loc in ['left', 'right']
@@ -474,11 +485,14 @@ class Map():
             frame_artists = self.artists('frame-parallel-label')
             for artist in frame_artists:
                 artist.remove()
-            self.fig.tight_layout()
+            self.fig.tight_layout(pad=0.5)
         self._config[myname] = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
-        zorder = kwargs.pop('zorder', self.ax.spines[loc].get_zorder())
+        # styling consistent with frame, i.e. with edge
+        color = kwargs.pop('color', self._edge.get_edgecolor())
+        alpha = kwargs.pop('alpha', self._edge.get_alpha())
+        zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
         verticalalignment = kwargs.pop('verticalalignment', 'center')
         horizontalalignment = self._negateLoc(loc) # no option along the frame
         _ = kwargs.pop('horizontalalignment', None)
@@ -518,7 +532,7 @@ class Map():
                         # these are set as annotations instead of simple axis ticks
                         # because those cannot be shifted by a constant point amount to
                         # follow the graticule
-                        self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, zorder=zorder,  **kwargs)
+                        self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder,  **kwargs)
 
     def _setFrame(self):
         # clean up existing frame
@@ -529,10 +543,17 @@ class Map():
         locs = ['left', 'bottom', 'right', 'top']
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
 
+        # use styling of edge for consistent map borders
+        ls = '-'
+        lw = self._edge.get_linewidth()
+        c = self._edge.get_edgecolor()
+        alpha = self._edge.get_alpha()
+        zorder = self._edge.get_zorder() - 1 # limits imprecise, hide underneath edge
+
+        precision = 1000
+        const = np.ones(precision)
         for loc in locs:
             # define line along axis
-            precision = 1000
-            const = np.ones(precision)
             if loc == "left":
                 line = xlim[0]*const, np.linspace(ylim[0], ylim[1], precision)
             if loc == "right":
@@ -541,13 +562,6 @@ class Map():
                 line = np.linspace(xlim[0], xlim[1], precision), ylim[0]*const
             if loc == "top":
                 line = np.linspace(xlim[0], xlim[1], precision), ylim[1]*const
-
-            # use styling of spine to mimic axes
-            ls = self.ax.spines[loc].get_ls()
-            lw = self.ax.spines[loc].get_lw()
-            c = self.ax.spines[loc].get_edgecolor()
-            alpha = self.ax.spines[loc].get_alpha()
-            zorder = self.ax.spines[loc].get_zorder()
 
             # show axis lines only where line is inside of map edge
             inside = self.proj.contains(*line)
@@ -583,7 +597,8 @@ class Map():
                 ymin = (line[1][startpos] - ylim[0])/(ylim[1]-ylim[0])
                 xmax = (line[0][stoppos] - xlim[0])/(xlim[1]-xlim[0])
                 ymax = (line[1][stoppos] - ylim[0])/(ylim[1]-ylim[0])
-                self.ax.plot([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, zorder=zorder, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % loc)
+                artist = Line2D([xmin,xmax], [ymin, ymax], c=c, ls=ls, lw=lw, alpha=alpha, zorder=zorder, clip_on=False, transform=self.ax.transAxes, gid='frame-%s' % loc)
+                self.ax.add_line(artist)
                 if start + 2 < len(jump):
                     start += 2
                 else:
@@ -693,7 +708,7 @@ class Map():
         cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
         cb.solids.set_edgecolor("face")
         cb.set_label(cb_label)
-        self.fig.tight_layout()
+        self.fig.tight_layout(pad=0.5)
         return cb
 
     def show(self, *args, **kwargs):
@@ -715,7 +730,6 @@ class Map():
 
         x,y  = self.proj.transform(ra, dec)
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
-        poly.set_clip_path(self._edge)
         self.ax.add_patch(poly)
         return poly
 
