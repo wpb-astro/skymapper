@@ -103,9 +103,8 @@ class Map():
         self.resolution = resolution
         self._setFigureAx(ax, interactive=interactive)
         self._setEdge(**kwargs)
-        if ax is None:
-            self.ax.relim()
-            self.ax.autoscale_view()
+        self.ax.relim()
+        self.ax.autoscale_view()
         self._setFrame()
         self.fig.tight_layout(pad=0.5)
 
@@ -133,7 +132,7 @@ class Map():
         config = dict(self._config)
         config['xlim'] = self.ax.get_xlim()
         config['ylim'] = self.ax.get_ylim()
-        return Map._create(config)
+        return Map._create(config, ax=ax)
 
     def save(self, filename):
         try:
@@ -322,10 +321,12 @@ class Map():
             return "left"
 
     def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
-        if self.edge_is_point[(p, 'parallel')]:
+        arguments = _parseArgs(locals())
+
+        key = (p, 'parallel')
+        if key in self.edge_is_point.keys() and self.edge_is_point[key]:
             return
 
-        arguments = _parseArgs(locals())
         myname = 'labelMeridianAtParallel'
         if myname not in self._config.keys():
             self._config[myname] = dict()
@@ -388,10 +389,12 @@ class Map():
             self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
-        if self.edge_is_point[(m, 'meridian')]:
+        arguments = _parseArgs(locals())
+
+        key = (m, 'meridian')
+        if key in self.edge_is_point.keys() and self.edge_is_point[key]:
             return
 
-        arguments = _parseArgs(locals())
         myname = 'labelParallelAtMeridian'
         if myname not in self._config.keys():
             self._config[myname] = dict()
@@ -772,7 +775,7 @@ class Map():
             **kwargs: matplotlib.collections.PolyCollection keywords
         """
         # search for survey in register
-        ra, dec = survey_register[surveyname].get_footprint()
+        ra, dec = survey_register[surveyname].getFootprint()
 
         x,y  = self.proj.transform(ra, dec)
         poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
