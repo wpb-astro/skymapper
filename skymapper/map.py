@@ -167,15 +167,15 @@ class Map():
         map.ax.set_ylim(ylim)
         map._setFrame()
 
-        meridian_args = config.pop('labelMeridianAtParallel')
-        parallel_args = config.pop('labelParallelAtMeridian')
+        meridian_args = config.pop('labelMeridianAtParallel', {})
+        parallel_args = config.pop('labelParallelAtMeridian', {})
         for method in config.keys():
             getattr(map, method)(**config[method])
 
-        for args in meridian_args:
+        for args in meridian_args.values():
             map.labelMeridianAtParallel(**args)
 
-        for args in parallel_args:
+        for args in parallel_args.values():
             map.labelParallelAtMeridian(**args)
 
         map.fig.tight_layout(pad=0.5)
@@ -232,10 +232,15 @@ class Map():
 
         # polygon of the map edge: top, left, bottom, right
         # don't poles if that's a single point
-        lines = []
-        for line in [self._getParallel(90), self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getParallel(-90, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]:
+        lines = [self._getParallel(90), self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getParallel(-90, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]
+        self.edge_is_point = {}
+        keys = [(90, 'parallel'),(self.proj.ra_0 + 180, 'meridian'),(-90, 'parallel'),(self.proj.ra_0 - 180, 'meridian')]
+        for loc,line in zip(keys, lines):
             if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
+                self.edge_is_point[loc] = False
                 lines.append(line)
+            else:
+                self.edge_is_point[loc] = True
 
         xy = np.concatenate(lines, axis=1).T
         self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
@@ -292,11 +297,11 @@ class Map():
             else:
                 getattr(self, method)()
 
-        # (re)generate eddge labels
+        # (re)generate edge labels
         for method in ['labelMeridianAtParallel', 'labelParallelAtMeridian']:
             if method in self._config.keys():
-                args_list = config.pop(method, [])
-                for args in arg_list:
+                args_list = self._config.pop(method, [])
+                for args in args_list.values():
                     getattr(self, method)(**args)
             else:
                 if method == 'labelMeridianAtParallel':
@@ -317,16 +322,25 @@ class Map():
             return "left"
 
     def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+        if self.edge_is_point[(p, 'parallel')]:
+            return
+
         arguments = _parseArgs(locals())
         myname = 'labelMeridianAtParallel'
         if myname not in self._config.keys():
-            self._config[myname] = []
+            self._config[myname] = dict()
+
+        # remove exisiting labels at p
+        gid = 'meridian-label-%r' % p
+        if p in self._config[myname].keys():
+            artists = self.artists(gid)
+            for artist in artists:
+                artist.remove()
+
+        self._config[myname][p] = arguments
 
         if meridians is None:
             meridians = self.meridians
-
-        arguments['meridians'] = meridians
-        self._config[myname].append(arguments)
 
         if loc is None:
             if p >= 0:
@@ -371,19 +385,28 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='meridian-label', **kwargs)
+            self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+        if self.edge_is_point[(m, 'meridian')]:
+            return
+
         arguments = _parseArgs(locals())
         myname = 'labelParallelAtMeridian'
         if myname not in self._config.keys():
-            self._config[myname] = []
+            self._config[myname] = dict()
+
+        # remove exisiting labels at m
+        gid = 'parallel-label-%r' % m
+        if m in self._config[myname].keys():
+            artists = self.artists(gid)
+            for artist in artists:
+                artist.remove()
+
+        self._config[myname][m] = arguments
 
         if parallels is None:
             parallels = self.parallels
-
-        arguments['parallels'] = parallels
-        self._config[myname].append(arguments)
 
         if loc is None:
             if m <= 0:
@@ -428,7 +451,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='parallel-label', **kwargs)
+            self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
     def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, **kwargs):
         assert loc in ['bottom', 'top']
