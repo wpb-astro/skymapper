@@ -255,8 +255,6 @@ class Map():
 
     def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self._config['grid'] = _parseArgs(locals())
-        self.parallel_fmt = parallel_fmt
-        self.meridian_fmt = meridian_fmt
         self._dec_range = np.linspace(dec_min, dec_max, self.resolution)
         self._ra_range = np.linspace(ra_min, ra_max, self.resolution) + self.proj.ra_0
         _parallels = np.arange(-90+sep,90,sep)
@@ -271,7 +269,7 @@ class Map():
                 artist.remove()
 
         # clean up frame meridian and parallel labels because they're tied to the grid
-        artists = self.artists('frame-meridian-label') + self.artists('frame-parallel-label')
+        artists = self.artists('meridian-label') + self.artists('parallel-label')
         for artist in artists:
                 artist.remove()
 
@@ -287,10 +285,26 @@ class Map():
         for m in _meridians:
             self._setMeridian(m, gid='grid-meridian-%r' % m, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
 
-        # regenerate the frame labels
+        # (re)generate the frame labels
         for method in ['labelMeridiansAtFrame', 'labelParallelsAtFrame']:
             if method in self._config.keys():
                 getattr(self, method)(**self._config[method])
+            else:
+                getattr(self, method)()
+
+        # (re)generate eddge labels
+        for method in ['labelMeridianAtParallel', 'labelParallelAtMeridian']:
+            if method in self._config.keys():
+                args_list = config.pop(method, [])
+                for args in arg_list:
+                    getattr(self, method)(**args)
+            else:
+                if method == 'labelMeridianAtParallel':
+                    degs = [-90, 90]
+                else:
+                    degs = [self.proj.ra_0 + 180, self.proj.ra_0 - 180]
+                for deg in degs:
+                    getattr(self, method)(deg)
 
     def _negateLoc(self, loc):
         if loc == "bottom":
@@ -357,7 +371,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self.meridian_fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='meridian-label', **kwargs)
+            self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='meridian-label', **kwargs)
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
         arguments = _parseArgs(locals())
@@ -414,7 +428,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self.parallel_fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='parallel-label', **kwargs)
+            self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid='parallel-label', **kwargs)
 
     def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, **kwargs):
         assert loc in ['bottom', 'top']
@@ -478,7 +492,7 @@ class Map():
                         # these are set as annotations instead of simple axis ticks
                         # because those cannot be shifted by a constant point amount to
                         # follow the graticule
-                        self.ax.annotate(self.meridian_fmt(m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
+                        self.ax.annotate(self._config['grid']['meridian_fmt'](m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
 
     def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, **kwargs):
         assert loc in ['left', 'right']
@@ -541,7 +555,7 @@ class Map():
                         # these are set as annotations instead of simple axis ticks
                         # because those cannot be shifted by a constant point amount to
                         # follow the graticule
-                        self.ax.annotate(self.parallel_fmt(p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder,  **kwargs)
+                        self.ax.annotate(self._config['grid']['parallel_fmt'](p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder,  **kwargs)
 
     def _setFrame(self):
         # clean up existing frame
