@@ -270,8 +270,8 @@ class Map():
         for artist in artists:
                 artist.remove()
 
-        # clean up meridian and parallel labels because they're tied to the grid
-        artists = self.artists('meridian-label') + self.artists('parallel-label')
+        # clean up frame meridian and parallel labels because they're tied to the grid
+        artists = self.artists('frame-meridian-label') + self.artists('frame-parallel-label')
         for artist in artists:
                 artist.remove()
 
@@ -286,6 +286,11 @@ class Map():
             self._setParallel(p, gid='grid-parallel-%r' % p, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
         for m in _meridians:
             self._setMeridian(m, gid='grid-meridian-%r' % m, lw=lw, c=c, alpha=alpha, zorder=zorder, **kwargs)
+
+        # regenerate the frame labels
+        for method in ['labelMeridiansAtFrame', 'labelParallelsAtFrame']:
+            if method in self._config.keys():
+                getattr(self, method)(**self._config[method])
 
     def _negateLoc(self, loc):
         if loc == "bottom":
@@ -302,6 +307,11 @@ class Map():
         myname = 'labelMeridianAtParallel'
         if myname not in self._config.keys():
             self._config[myname] = []
+
+        if meridians is None:
+            meridians = self.meridians
+
+        arguments['meridians'] = meridians
         self._config[myname].append(arguments)
 
         if loc is None:
@@ -333,9 +343,6 @@ class Map():
             closest = np.argmin(np.abs(options - angle))
             rot_base = options[closest]
 
-        if meridians is None:
-            meridians = self.meridians
-
         for m in meridians:
             # move label along meridian
             xp, yp = self.proj.transform(m, p)
@@ -357,6 +364,11 @@ class Map():
         myname = 'labelParallelAtMeridian'
         if myname not in self._config.keys():
             self._config[myname] = []
+
+        if parallels is None:
+            parallels = self.parallels
+
+        arguments['parallels'] = parallels
         self._config[myname].append(arguments)
 
         if loc is None:
@@ -387,9 +399,6 @@ class Map():
             options = np.arange(-2,3) * 90
             closest = np.argmin(np.abs(options - angle))
             rot_base = options[closest]
-
-        if parallels is None:
-            parallels = self.parallels
 
         for p in parallels:
             # move label along parallel
