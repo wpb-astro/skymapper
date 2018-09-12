@@ -15,7 +15,6 @@ def loadMap(surveyname, ax=None):
     survey = survey_register[surveyname]
     return Map.load(survey.getConfigfile(), ax=ax)
 
-
 def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     """Determine optimal configuration of conic map.
 
@@ -55,5 +54,5 @@ def getOptimalConicProjection(ra, dec, proj_class=None, ra0=None, dec0=None):
     dec2 -= delta_dec[1]/7
 
     if proj_class is None:
-        proj_class = AlbersEqualAreaProjection
+        proj_class = Albers
     return proj_class(ra0, dec0, dec1, dec2)

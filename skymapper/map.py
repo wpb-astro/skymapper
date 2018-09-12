@@ -714,6 +714,7 @@ class Map():
         # determine proper gridsize: by default x is only needed, y is chosen accordingly
         gridsize = kwargs.pop("gridsize", None)
         mincnt = kwargs.pop("mincnt", 1)
+        clip_path = kwargs.pop('clip_path', self._edge)
         if gridsize is None:
             xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
             per_sample_volume = (xlim[1]-xlim[0])**2 / x.size * 10
@@ -723,11 +724,11 @@ class Map():
         if C is None:
             cmap = kwargs.pop("cmap", "YlOrRd")
         else:
-            cmap = kwargs.pop("cmap", "None")
+            cmap = kwargs.pop("cmap", None)
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
 
         artist = self.ax.hexbin(x, y, C=C, gridsize=gridsize, mincnt=mincnt, cmap=cmap, zorder=zorder, **kwargs)
-        artist.set_clip_path(self._edge)
+        artist.set_clip_path(clip_path)
         return artist
 
     def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
@@ -799,9 +800,11 @@ class Map():
 
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        clip_path = kwargs.pop('clip_path', self._edge)
         coll = PolyCollection(vertices_, array=color, zorder=zorder, **kwargs)
         coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
+        coll.set_clip_path(clip_path)
         self.ax.add_collection(coll)
         return coll
 
@@ -889,8 +892,9 @@ class Map():
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         _ = kwargs.pop('extend', None)
         zorder = kwargs.pop("zorder", 0) # default for imshow: underneath everything
+        clip_path = kwargs.pop('clip_path', self._edge)
         artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
-        artist.set_clip_path(self._edge)
+        artist.set_clip_path(clip_path)
         # ... because imshow focusses on extent
         self.ax.set_xlim(xlim_)
         self.ax.set_ylim(ylim_)
@@ -926,9 +930,10 @@ class Map():
         rap, decp = self.proj.invert(xp[inside], yp[inside])
         vp[inside] = rbfi(rap, decp)
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        clip_path = kwargs.pop('clip_path', self._edge)
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         artist = self.ax.imshow(vp, extent=(xline[0], xline[-1], yline[0], yline[-1]), zorder=zorder, **kwargs)
-        artist.set_clip_path(self._edge)
+        artist.set_clip_path(clip_path)
         # ... because imshow focusses on extent
         self.ax.set_xlim(xlim_)
         self.ax.set_ylim(ylim_)
