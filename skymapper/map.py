@@ -367,7 +367,7 @@ class Map():
         if rotation is None:
             m = self.proj.ra_0
             dxy = self.proj.gradient(m, p, direction=direction)
-            angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
+            angle = np.arctan2(*dxy) / DEG2RAD
             options = np.arange(-2,3) * 90 # multiples of 90 deg
             closest = np.argmin(np.abs(options - angle))
             rot_base = options[closest]
@@ -382,7 +382,7 @@ class Map():
 
             if rotation is None:
                 dxy_ = self.proj.gradient(m, p, direction=direction)
-                angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+                angle = rot_base - np.arctan2(*dxy_) / DEG2RAD
             else:
                 angle = rotation
 
@@ -435,7 +435,7 @@ class Map():
         if rotation is None:
             p = 0
             dxy = self.proj.gradient(m, p, direction=direction)
-            angle = np.arctan2(dxy[0], dxy[1]) / DEG2RAD
+            angle = np.arctan2(*dxy) / DEG2RAD
             options = np.arange(-2,3) * 90
             closest = np.argmin(np.abs(options - angle))
             rot_base = options[closest]
@@ -445,12 +445,12 @@ class Map():
             xp, yp = self.proj.transform(m, p)
             dxy = self.proj.gradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
-            if loc == 'left':
+            if loc == 'right':
                 dxy *= -1
 
             if rotation is None:
                 dxy_ = self.proj.gradient(m, p, direction=direction)
-                angle = rot_base-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+                angle = rot_base-np.arctan2(*dxy_) / DEG2RAD
             else:
                 angle = rotation
 
@@ -736,7 +736,7 @@ class Map():
 
         if rotation is None:
             dxy_ = self.proj.gradient(ra, dec, direction=direction)
-            angle = 90-np.arctan2(dxy_[0], dxy_[1]) / DEG2RAD
+            angle = 90-np.arctan2(*dxy_) / DEG2RAD
         else:
             angle = rotation
 

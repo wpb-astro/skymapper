@@ -84,8 +84,8 @@ class BaseProjection(object):
         # gradients in *positive* dec and *negative* ra
         if direction == 'parallel':
             test = np.empty((2, ra_.size))
-            test[0] = ra_+sep/2
-            test[1] = ra_-sep/2
+            test[0] = ra_-sep/2
+            test[1] = ra_+sep/2
 
             # check for points beyond -180 / 180
             mask = test[0] >= self.ra_0 + 180
@@ -112,7 +112,7 @@ class BaseProjection(object):
         x[1] = (y[1] - y[0])/sep # dy
         if isArray:
             return x.T
-        return np.array((x[0], x[1]))
+        return x[:,0]
 
     def jacobian(self, ra, dec, sep=1e-2):
         dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
