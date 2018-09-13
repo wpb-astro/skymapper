@@ -76,28 +76,43 @@ class BaseProjection(object):
         pass
 
     def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
-        # gradients in *positive* dec and *negative* ra
         assert direction in ['parallel', 'meridian']
-        correction = 1
+
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+
+        # gradients in *positive* dec and *negative* ra
         if direction == 'parallel':
-            testm = np.array([ra+sep/2, ra-sep/2])
-            if testm[0] >= self.ra_0 + 180:
-                testm[0] = ra
-                correction = 2
-            if testm[1] <= self.ra_0 - 180:
-                testm[1] = ra
-                correction = 2
-            x_, y_ = self.transform(testm, np.ones(2)*dec)
+            test = np.empty((2, ra_.size))
+            test[0] = ra_+sep/2
+            test[1] = ra_-sep/2
+
+            # check for points beyond -180 / 180
+            mask = test[0] >= self.ra_0 + 180
+            test[0][mask] = ra_[mask]
+            mask = test[1] <= self.ra_0 - 180
+            test[1][mask] = ra_[mask]
+
+            x, y = self.transform(test, np.ones(ra_.size)*dec)
         else:
-            testp = np.array([dec-sep/2, dec+sep/2])
-            if testp[0] <= -90:
-                testp[0] = dec
-                correction = 2
-            if testp[1] >= 90:
-                testp[1] = dec
-                correction = 2
-            x_, y_ = self.transform(np.ones(2)*ra, testp)
-        return np.array((x_[1] - x_[0], y_[1] - y_[0])) * correction / sep
+            test = np.empty((2, dec_.size))
+            test[0] = dec_-sep/2
+            test[1] = dec_+sep/2
+
+            # check for points beyond -90 / 90
+            mask = test[0] <= -90
+            test[0][mask] = dec_[mask]
+            mask = test[1] >= 90
+            test[1][mask] = dec_[mask]
+
+            x, y = self.transform(np.ones(dec_.size)*ra, test)
+
+        sep = test[1] - test[0]
+        x[0] = (x[1] - x[0])/sep # dx
+        x[1] = (y[1] - y[0])/sep # dy
+        if isArray:
+            return x.T
+        return np.array((x[0], x[1]))
 
     def jacobian(self, ra, dec, sep=1e-2):
         dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
