@@ -761,6 +761,24 @@ class Map():
         self.fig.tight_layout(pad=0.5)
         return cb
 
+    def focus(self, ra, dec, pad=0.05):
+        # to replace the autoscale function that cannot zoom in
+        x, y = self.proj.transform(ra, dec)
+        xlim = [x.min(), x.max()]
+        ylim = [y.min(), y.max()]
+        xrange = xlim[1]-xlim[0]
+        yrange = ylim[1]-ylim[0]
+        # TODO: pad should better be in points, not data units
+        xlim[0] -= pad * xrange
+        xlim[1] += pad * xrange
+        ylim[0] -= pad * yrange
+        ylim[1] += pad * yrange
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+        self._resetFrame()
+        self.fig.canvas.draw()
+
+
     def show(self, *args, **kwargs):
         self.fig.show(*args, **kwargs)
 
