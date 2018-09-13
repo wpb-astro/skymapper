@@ -88,9 +88,9 @@ class BaseProjection(object):
             test[1] = ra_+sep/2
 
             # check for points beyond -180 / 180
-            mask = test[0] >= self.ra_0 + 180
+            mask = test[0] <= self.ra_0 - 180
             test[0][mask] = ra_[mask]
-            mask = test[1] <= self.ra_0 - 180
+            mask = test[1] >= self.ra_0 + 180
             test[1][mask] = ra_[mask]
 
             x, y = self.transform(test, np.ones(ra_.size)*dec)
@@ -117,7 +117,7 @@ class BaseProjection(object):
     def jacobian(self, ra, dec, sep=1e-2):
         dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
         dxy_ddec = self.gradient(ra, dec, sep=sep, direction='meridian')
-        return np.array((dxy_dra, dxy_ddec)).T
+        return np.dstack((dxy_dra, dxy_ddec))
 
     def _wrapRA(self, ra):
         ra_, isArray = _toArray(ra)
