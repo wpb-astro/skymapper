@@ -107,7 +107,7 @@ class Map():
         self.ax.relim()
         self.ax.autoscale_view()
         self._setFrame()
-        self.fig.tight_layout(pad=0.5)
+        self.fig.tight_layout(pad=0.75)
 
     def _setFigureAx(self, ax=None, interactive=True):
         if ax is None:
@@ -178,7 +178,7 @@ class Map():
         for args in parallel_args.values():
             map.labelParallelAtMeridian(**args)
 
-        map.fig.tight_layout(pad=0.5)
+        map.fig.tight_layout(pad=0.75)
         return map
 
     @property
@@ -225,10 +225,10 @@ class Map():
         # styling: frame needs to be on top of everything, must be transparent
         facecolor = 'None'
         zorder = 1000
-        lw = kwargs.pop('lw', 1)
+        lw = kwargs.pop('lw', 0.7)
         edgecolor = kwargs.pop('edgecolor', 'k')
         # if there is facecolor: clone the polygon and put it in as bottom layer
-        facecolor_ = kwargs.pop('facecolor', None)
+        facecolor_ = kwargs.pop('facecolor', '#dddddd')
 
         # polygon of the map edge: top, left, bottom, right
         # don't poles if that's a single point
@@ -471,7 +471,7 @@ class Map():
             frame_artists = self.artists('frame-meridian-label')
             for artist in frame_artists:
                 artist.remove()
-            self.fig.tight_layout(pad=0.5)
+            self.fig.tight_layout(pad=0.75)
         self._config[myname] = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
@@ -535,7 +535,7 @@ class Map():
             frame_artists = self.artists('frame-parallel-label')
             for artist in frame_artists:
                 artist.remove()
-            self.fig.tight_layout(pad=0.5)
+            self.fig.tight_layout(pad=0.75)
         self._config[myname] = arguments
 
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
@@ -759,10 +759,10 @@ class Map():
         cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
         cb.solids.set_edgecolor("face")
         cb.set_label(cb_label)
-        self.fig.tight_layout(pad=0.5)
+        self.fig.tight_layout(pad=0.75)
         return cb
 
-    def focus(self, ra, dec, pad=0.05):
+    def focus(self, ra, dec, pad=0.025):
         # to replace the autoscale function that cannot zoom in
         x, y = self.proj.transform(ra, dec)
         xlim = [x.min(), x.max()]
@@ -820,10 +820,9 @@ class Map():
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         clip_path = kwargs.pop('clip_path', self._edge)
-        coll = PolyCollection(vertices_, array=color, zorder=zorder, **kwargs)
+        coll = PolyCollection(vertices_, array=color, zorder=zorder, clip_path=clip_path, **kwargs)
         coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
-        coll.set_clip_path(clip_path)
         self.ax.add_collection(coll)
         return coll
 
@@ -900,10 +899,10 @@ class Map():
         # evaluate interpolator over the range covered by data
         xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
         per_sample_volume = min(xlim[1]-xlim[0], ylim[1]-ylim[0])**2 / x.size
-        delta = np.sqrt(per_sample_volume)
-        xline = np.arange(xlim[0]-delta/2, xlim[1]+delta/2, delta)
-        yline = np.arange(ylim[0]-delta/2, ylim[1]+delta/2, delta)
-        xp, yp = np.meshgrid(xline, yline)
+        dx = np.sqrt(per_sample_volume)
+        xline = np.arange(xlim[0], xlim[1], dx)
+        yline = np.arange(ylim[0], ylim[1], dx)
+        xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
 
         vp = scipy.interpolate.griddata(np.dstack((x,y))[0], value, (xp,yp), method=method, fill_value=fill_value)
         # remember axes limits ...
@@ -935,15 +934,18 @@ class Map():
 
         # make grid in x/y over the limits of the map or the clip_path
         clip_path = kwargs.pop('clip_path', self._edge)
-        xlim = clip_path.xy[:, 0].min(), clip_path.xy[:, 0].max()
-        ylim = clip_path.xy[:, 1].min(), clip_path.xy[:, 1].max()
+        if clip_path is None:
+            xlim, ylim = self.xlim(), self.ylim()
+        else:
+            xlim = clip_path.xy[:, 0].min(), clip_path.xy[:, 0].max()
+            ylim = clip_path.xy[:, 1].min(), clip_path.xy[:, 1].max()
 
         if resolution % 1 == 0:
             resolution += 1
 
         dx = (xlim[1]-xlim[0])/resolution
-        xline = np.arange(xlim[0], xlim[1] + dx, dx)
-        yline = np.arange(ylim[0], ylim[1] + dx, dx)
+        xline = np.arange(xlim[0], xlim[1], dx)
+        yline = np.arange(ylim[0], ylim[1], dx)
         xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
         inside = self.proj.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
@@ -952,7 +954,7 @@ class Map():
         vp[inside] = rbfi(rap, decp)
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
-        artist = self.ax.imshow(vp, extent=(xline[0], xline[-1], yline[0], yline[-1]), zorder=zorder, **kwargs)
+        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
         artist.set_clip_path(clip_path)
         # ... because imshow focusses on extent
         self.ax.set_xlim(xlim_)

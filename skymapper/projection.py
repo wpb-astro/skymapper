@@ -1,4 +1,6 @@
 import numpy as np
+import scipy.integrate
+import scipy.optimize
 
 DEG2RAD = np.pi/180
 
@@ -34,12 +36,6 @@ def _optimize(proj_cls, x0, ra, dec, reduce_fct, bounds=None):
     print ("Best objective %.6f at %r" % (fmin, x))
     return proj_cls(*x)
 
-# only needed for some projections, not enough to make scipy requirement
-try:
-    import scipy.integrate
-    import scipy.optimize
-except ImportError:
-    pass
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
