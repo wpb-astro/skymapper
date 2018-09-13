@@ -883,7 +883,7 @@ class Map():
         # make a map of the vertices
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, **kwargs)
 
-    def interpolate(self, ra, dec, value, **kwargs):
+    def interpolate(self, ra, dec, value, method='cubic', fill_value=np.nan, **kwargs):
         """Interpolate ra,dec samples over covered region in the map
 
         Requires scipy, uses `scipy.interpolate.griddata` with `method='cubic'`.
@@ -905,7 +905,7 @@ class Map():
         xp, yp = np.meshgrid(xline, yline)
 
         from scipy.interpolate import griddata
-        vp = griddata(np.dstack((x,y))[0], value, (xp,yp), method='cubic')
+        vp = griddata(np.dstack((x,y))[0], value, (xp,yp), method=method, fill_value=fill_value)
         # remember axes limits ...
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         _ = kwargs.pop('extend', None)
@@ -918,7 +918,7 @@ class Map():
         self.ax.set_ylim(ylim_)
         return artist
 
-    def extrapolate(self, ra, dec, value, resolution=300, **kwargs):
+    def extrapolate(self, ra, dec, value, resolution=100, **kwargs):
         """Extrapolate ra,dec samples on the entire sphere and project on the map
 
         Requires scipy, uses default `scipy.interpolate.Rbf`.
@@ -934,21 +934,24 @@ class Map():
         from scipy.interpolate import Rbf
         rbfi = Rbf(ra, dec, value, norm=skyDistance)
 
-        # make grid in x/y over the limits of the map
-        xlim, ylim = self.xlim(), self.ylim()
+        # make grid in x/y over the limits of the map or the clip_path
+        clip_path = kwargs.pop('clip_path', self._edge)
+        xlim = clip_path.xy[:, 0].min(), clip_path.xy[:, 0].max()
+        ylim = clip_path.xy[:, 1].min(), clip_path.xy[:, 1].max()
+
         if resolution % 1 == 0:
             resolution += 1
+
         dx = (xlim[1]-xlim[0])/resolution
-        xline = np.arange(xlim[0], xlim[1], dx) + dx/2 # evaluate center pixel
-        yline = np.arange(ylim[0], ylim[1], dx) + dx/2
-        xp, yp = np.meshgrid(xline, yline)
+        xline = np.arange(xlim[0], xlim[1] + dx, dx)
+        yline = np.arange(ylim[0], ylim[1] + dx, dx)
+        xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
         inside = self.proj.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
 
         rap, decp = self.proj.invert(xp[inside], yp[inside])
         vp[inside] = rbfi(rap, decp)
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        clip_path = kwargs.pop('clip_path', self._edge)
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         artist = self.ax.imshow(vp, extent=(xline[0], xline[-1], yline[0], yline[-1]), zorder=zorder, **kwargs)
         artist.set_clip_path(clip_path)

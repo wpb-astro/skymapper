@@ -131,7 +131,7 @@ class BaseProjection(object):
         a = (a_ + b_) / 2
         b = (a_ - b_) / 2
         s = h*k*sin_t
-        return np.abs(a), np.abs(b)
+        return a, b
 
     def _wrapRA(self, ra):
         ra_, isArray = _toArray(ra)
