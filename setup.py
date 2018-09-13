@@ -1,14 +1,29 @@
 from setuptools import setup
 
-setup(name="skymapper",
-      description="Mapping astronomical survey data on the sky, handsomely",
-      long_description="Mapping astronomical survey data on the sky, handsomely",
-      version="0.1",
-      license="MIT",
-      author="Peter Melchior",
-      author_email="peter.m.melchior@gmail.com",
-      url="https://github.com/pmelchior/skymapper",
-      requires=["matplotlib", "numpy"],
-      packages=["skymapper", "skymapper.surveys"],
-      package_data={"skymapper.surveys": ['*.txt']}
+long_description = open('README.md').read()
+
+setup(
+    name="skymapper",
+    description="Mapping astronomical survey data on the sky, handsomely",
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+    version="0.2",
+    license="MIT",
+    author="Peter Melchior",
+    author_email="peter.m.melchior@gmail.com",
+    url="https://github.com/pmelchior/skymapper",
+    packages=["skymapper", "skymapper.survey"],
+    package_data={"skymapper.survey": ['*.txt']}
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "License :: OSI Approved :: MIT License",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Education",
+        "Intended Audience :: Science/Research",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Topic :: Scientific/Engineering :: Astronomy"
+    ],
+    keywords = ['visualization','map projection','matplotlib'],
+    requires=["matplotlib", "numpy", "scipy"]
 )
