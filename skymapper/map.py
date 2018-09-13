@@ -1,6 +1,7 @@
 import matplotlib
 import numpy as np
 import re, pickle
+import scipy.interpolate
 from . import healpix
 from . import survey_register
 from matplotlib.lines import Line2D
@@ -904,8 +905,7 @@ class Map():
         yline = np.arange(ylim[0]-delta/2, ylim[1]+delta/2, delta)
         xp, yp = np.meshgrid(xline, yline)
 
-        from scipy.interpolate import griddata
-        vp = griddata(np.dstack((x,y))[0], value, (xp,yp), method=method, fill_value=fill_value)
+        vp = scipy.interpolate.griddata(np.dstack((x,y))[0], value, (xp,yp), method=method, fill_value=fill_value)
         # remember axes limits ...
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         _ = kwargs.pop('extend', None)
@@ -931,8 +931,7 @@ class Map():
             **kwargs: arguments for matplotlib.imshow
         """
         # interpolate samples in RA/DEC
-        from scipy.interpolate import Rbf
-        rbfi = Rbf(ra, dec, value, norm=skyDistance)
+        rbfi = scipy.interpolate.Rbf(ra, dec, value, norm=skyDistance)
 
         # make grid in x/y over the limits of the map or the clip_path
         clip_path = kwargs.pop('clip_path', self._edge)

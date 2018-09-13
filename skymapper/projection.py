@@ -9,6 +9,31 @@ def _toArray(x):
         return np.array(x), True
     return np.array([x]), False
 
+def ellipticity(a, b):
+    return 1-np.abs(b/a)
+def meanDistortion(a, b):
+    return np.mean(ellipticity(a,b))
+def maxDistortion(a,b):
+    return np.max(ellipticity(a,b))
+def stdDistortion(a,b):
+    return (b/a).std() # include the sign
+def stdScale(a,b):
+    return (a*b).std()
+def stdDistortionScale(a,b):
+    return stdScale(a,b) + stdDistortion(a,b)
+
+def _optimize_objective(x, proj_type, ra, dec, reduce_fct):
+    proj = proj_type(*x)
+    a, b = proj.distortion(ra, dec)
+    return reduce_fct(a,b)
+
+def _optimize(proj_cls, x0, ra, dec, reduce_fct, bounds=None):
+    print ("optimizing parameters for %r" % proj_cls)
+    from scipy.optimize import fmin_l_bfgs_b
+    x, fmin, d = fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, reduce_fct), bounds=bounds, approx_grad=True)
+    print ("Best objective %.6f at %r" % (fmin, x))
+    return proj_cls(*x)
+
 # only needed for some projections, not enough to make scipy requirement
 try:
     import scipy.integrate
@@ -18,7 +43,7 @@ except ImportError:
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
-from . import register_projection
+from . import register_projection, projection_register
 class Meta(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)
@@ -75,6 +100,25 @@ class BaseProjection(object):
         """
         pass
 
+    def _wrapRA(self, ra):
+        ra_, isArray = _toArray(ra)
+        ra_ = self.ra_0 - ra_ # inverse for RA
+        # check that ra_ is between -180 and 180 deg
+        ra_[ra_ < -180 ] += 360
+        ra_[ra_ > 180 ] -= 360
+        if isArray:
+            return ra_
+        return ra_[0]
+
+    def _unwrapRA(self, ra):
+        ra_, isArray = _toArray(ra)
+        ra_ = self.ra_0 - ra_
+        ra_ [ra_ < 0] += 360
+        ra_ [ra_ > 360] -= 360
+        if isArray:
+            return ra_
+        return ra_[0]
+
     def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
         assert direction in ['parallel', 'meridian']
 
@@ -93,7 +137,7 @@ class BaseProjection(object):
             mask = test[1] >= self.ra_0 + 180
             test[1][mask] = ra_[mask]
 
-            x, y = self.transform(test, np.ones(ra_.size)*dec)
+            x, y = self.transform(test, np.ones((2,ra_.size))*dec)
         else:
             test = np.empty((2, dec_.size))
             test[0] = dec_-sep/2
@@ -105,7 +149,7 @@ class BaseProjection(object):
             mask = test[1] >= 90
             test[1][mask] = dec_[mask]
 
-            x, y = self.transform(np.ones(dec_.size)*ra, test)
+            x, y = self.transform(np.ones((2,dec_.size))*ra, test)
 
         sep = test[1] - test[0]
         x[0] = (x[1] - x[0])/sep # dx
@@ -133,29 +177,57 @@ class BaseProjection(object):
         s = h*k*sin_t
         return a, b
 
-    def _wrapRA(self, ra):
-        ra_, isArray = _toArray(ra)
-        ra_ = self.ra_0 - ra_ # inverse for RA
-        # check that ra_ is between -180 and 180 deg
-        ra_[ra_ < -180 ] += 360
-        ra_[ra_ > 180 ] -= 360
-        if isArray:
-            return ra_
-        return ra_[0]
-
-    def _unwrapRA(self, ra):
-        ra_, isArray = _toArray(ra)
-        ra_ = self.ra_0 - ra_
-        ra_ [ra_ < 0] += 360
-        ra_ [ra_ > 360] -= 360
-        if isArray:
-            return ra_
-        return ra_[0]
+    @classmethod
+    def optimize(cls, ra, dec, bounds=None, reduce_fct=meanDistortion):
+        ra_ = np.array(ra)
+        ra_[ra_ > 180] -= 360
+        ra_[ra_ < -180] += 360
+        ra0 = ra_.mean()
+        if ra0 < 0:
+            ra0 += 360
+        x0 = np.array((ra0,))
+        bounds = ((0, 360),)
+        return _optimize(cls, x0, ra, dec, reduce_fct, bounds=bounds)
 
 class Projection(BaseProjection, metaclass=Meta):
     pass
 
-class Albers(Projection):
+
+class ConicProjection(Projection):
+    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+        self.ra_0 = ra_0
+        self.dec_0 = dec_0
+        self.dec_1 = dec_1
+        self.dec_2 = dec_2
+
+    @classmethod
+    def optimize(cls, ra, dec, bounds=None, reduce_fct=meanDistortion):
+        # for conics: need to determine central ra, dec plus two standard parallels
+        # normalize ra
+        ra_ = np.array(ra)
+        ra_[ra_ > 180] -= 360
+        ra_[ra_ < -180] += 360
+        # weigh more towards the poles because that decreases distortions
+        ra0 = (ra_ * dec).sum() / dec.sum()
+        if ra0 < 0:
+            ra0 += 360
+        dec0 = np.median(dec)
+
+        # determine standard parallels
+        dec1, dec2 = dec.min(), dec.max()
+
+        # move standard parallels 1/6 further in from the extremes
+        # to minimize scale variations (Snyder 1987, section 14)
+        delta_dec = (dec0 - dec1, dec2 - dec0)
+        dec1 += delta_dec[0]/6
+        dec2 -= delta_dec[1]/6
+
+        x0 = np.array((ra0, dec0, dec1, dec2))
+        bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
+        return _optimize(cls, x0, ra, dec, reduce_fct, bounds=bounds)
+
+
+class Albers(ConicProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Albers Equal-Area conic projection
 
@@ -179,10 +251,7 @@ class Albers(Projection):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be -dec_1)
         """
-        self.ra_0 = ra_0
-        self.dec_0 = dec_0
-        self.dec_1 = dec_1
-        self.dec_2 = dec_2
+        super(Albers, self).__init__(ra_0, dec_0, dec_1, dec_2)
 
         # Snyder 1987, eq. 14-3 to 14-6.
         self.n = (np.sin(dec_1 * DEG2RAD) + np.sin(dec_2 * DEG2RAD)) / 2
@@ -224,7 +293,7 @@ class Albers(Projection):
     def __repr__(self):
         return "Albers(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
-class LambertConformalConic(Projection):
+class LambertConformal(ConicProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Lambert Conformal conic projection
 
@@ -248,10 +317,7 @@ class LambertConformalConic(Projection):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be -dec_1)
         """
-        self.ra_0 = ra_0
-        self.dec_0 = dec_0
-        self.dec_1 = dec_1
-        self.dec_2 = dec_2
+        super(LambertConformal, self).__init__(ra_0, dec_0, dec_1, dec_2)
 
         # Snyder 1987, eq. 14-1, 14-2 and 15-1 to 15-3.
         self.dec_max = 89.99
@@ -300,7 +366,7 @@ class LambertConformalConic(Projection):
         return "LambertConformal(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 
-class EquidistantConic(Projection):
+class Equidistant(ConicProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Equidistant conic projection
 
@@ -322,10 +388,7 @@ class EquidistantConic(Projection):
             dec_1: lower standard parallel
             dec_2: upper standard parallel (must not be +-dec_1)
         """
-        self.ra_0 = ra_0
-        self.dec_0 = dec_0
-        self.dec_1 = dec_1
-        self.dec_2 = dec_2
+        super(Equidistant, self).__init__(ra_0, dec_0, dec_1, dec_2)
 
         # Snyder 1987, eq. 14-3 to 14-6.
         self.n = (np.cos(dec_1 * DEG2RAD) - np.cos(dec_2 * DEG2RAD)) / (dec_2  - dec_1) / DEG2RAD
@@ -409,7 +472,7 @@ class Hammer(Projection):
         return "Hammer(%r)" % self.ra_0
 
 
-class HyperElliptical(Projection):
+class HyperEllipticalProjection(Projection):
 
     def __init__(self, ra_0, alpha, k, gamma):
         self.ra_0 = ra_0
@@ -505,7 +568,7 @@ class HyperElliptical(Projection):
             it += 1
         return y
 
-class Tobler(HyperElliptical):
+class Tobler(HyperEllipticalProjection):
     """Tobler hyperelliptical projection.
 
     See Snyder (1993, p. 202) for details.
@@ -514,27 +577,27 @@ class Tobler(HyperElliptical):
         alpha, k, gamma = 0, 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
 
-class Mollweide(HyperElliptical):
+class Mollweide(HyperEllipticalProjection):
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2, 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
 
-class Collignon(HyperElliptical):
+class Collignon(HyperEllipticalProjection):
     def __init__(self, ra_0, gamma=1.):
         alpha, k = 0, 1
         super(Collignon, self).__init__(ra_0, alpha, k, gamma)
 
-class EckertII(HyperElliptical):
+class EckertII(HyperEllipticalProjection):
     def __init__(self, ra_0, gamma=1.):
         alpha, k = 0.5, 1
         super(EckertII, self).__init__(ra_0, alpha, k, gamma)
 
-class EckertIV(HyperElliptical):
+class EckertIV(HyperEllipticalProjection):
     def __init__(self, ra_0, gamma=1.):
         alpha, k = 0.5, 2
         super(EckertIV, self).__init__(ra_0, alpha, k, gamma)
 
-class HyperCloid(HyperElliptical):
+class HyperCloid(HyperEllipticalProjection):
     def __init__(self, ra_0, gamma=1):
         alpha, k = 0, 1.5
         super(HyperCloid, self).__init__(ra_0, alpha, k, gamma)
