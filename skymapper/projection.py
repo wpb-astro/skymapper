@@ -119,6 +119,20 @@ class BaseProjection(object):
         dxy_ddec = self.gradient(ra, dec, sep=sep, direction='meridian')
         return np.dstack((dxy_dra, dxy_ddec))
 
+    def distortion(self, ra, dec):
+        # Snyder (1987, section 4)
+        jac = self.jacobian(ra,dec)
+        cos_phi = np.cos(dec * DEG2RAD)
+        h = np.sqrt(jac[:,0,1]**2 + jac[:,1,1]**2)
+        k = np.sqrt(jac[:,0,0]**2 + jac[:,1,0]**2) / cos_phi
+        sin_t = (jac[:,1,1]*jac[:,0,0] - jac[:,0,1]*jac[:,1,0])/(h*k*cos_phi)
+        a_ = np.sqrt(h*h + k*k + 2*h*k*sin_t)
+        b_ = np.sqrt(h*h + k*k - 2*h*k*sin_t)
+        a = (a_ + b_) / 2
+        b = (a_ - b_) / 2
+        s = h*k*sin_t
+        return np.abs(a), np.abs(b)
+
     def _wrapRA(self, ra):
         ra_, isArray = _toArray(ra)
         ra_ = self.ra_0 - ra_ # inverse for RA
