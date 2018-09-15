@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     # define the best Albers projection for the footprint
     # minimizing the variation in distortion
-    crit = skm.projection.stdDistortion
+    crit = skm.stdDistortion
     proj = skm.Albers.optimize(ra, dec, reduce_fct=crit)
 
     # construct map: will hold figure and projection

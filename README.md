@@ -12,16 +12,18 @@ What can it do? For instance, [creating a density map](examples/example1.py) fro
 ```python
 import skymapper as skm
 
-# define the best Albers projection for a given list of sample ra, dec
-# minimizing the variation in map distortion
-crit = skm.projection.stdDistortion
+# define the best Albers projection for the footprint
+# minimizing the variation in distortion
+crit = skm.stdDistortion
 proj = skm.Albers.optimize(ra, dec, reduce_fct=crit)
 
-# construct map: will create and hold figure
-# can be style with kwargs for matplotlib Polygon
+# construct map: will hold figure and projection
+# the outline of the sphere can be styled with kwargs for matplotlib Polygon
 map = skm.Map(proj)
 
-# show with 15 deg graticules
+# add graticules, separated by 15 deg
+# the lines can be styled with kwargs for matplotlib Line2D
+# additional arguments for formatting the graticule labels
 sep=15
 map.grid(sep=sep)
 
