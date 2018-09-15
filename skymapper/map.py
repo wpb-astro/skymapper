@@ -769,7 +769,6 @@ class Map():
         ylim = [y.min(), y.max()]
         xrange = xlim[1]-xlim[0]
         yrange = ylim[1]-ylim[0]
-        # TODO: pad should better be in points, not data units
         xlim[0] -= pad * xrange
         xlim[1] += pad * xrange
         ylim[0] -= pad * yrange
@@ -779,6 +778,19 @@ class Map():
         self._resetFrame()
         self.fig.canvas.draw()
 
+    def defocus(self, pad=0.025):
+        # to replace the autoscale function that cannot zoom in
+        xlim, ylim = list(self.xlim()), list(self.ylim())
+        xrange = xlim[1]-xlim[0]
+        yrange = ylim[1]-ylim[0]
+        xlim[0] -= pad * xrange
+        xlim[1] += pad * xrange
+        ylim[0] -= pad * yrange
+        ylim[1] += pad * yrange
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+        self._clearFrame()
+        self.fig.canvas.draw()
 
     def show(self, *args, **kwargs):
         self.fig.show(*args, **kwargs)

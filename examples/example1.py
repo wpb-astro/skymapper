@@ -57,11 +57,13 @@ if __name__ == "__main__":
     crit = skm.projection.stdDistortion
     proj = skm.Albers.optimize(ra, dec, reduce_fct=crit)
 
-    # construct map: will hold figure and transform using proj
-    # can be style with kwargs for matplotlib Polygon
+    # construct map: will hold figure and projection
+    # the outline of the sphere can be styled with kwargs for matplotlib Polygon
     map = skm.Map(proj)
 
-    # show with 15 deg graticules
+    # add graticules, separated by 15 deg
+    # the lines can be styled with kwargs for matplotlib Line2D
+    # additional arguments for formatting the graticule labels
     sep=15
     map.grid(sep=sep)
 
@@ -69,8 +71,8 @@ if __name__ == "__main__":
     for m in [proj.ra_0 + 180, proj.ra_0 - 180]:
         map.labelParallelAtMeridian(m, verticalalignment='top', horizontalalignment='center')
 
-    # alter number of labels at the south pole
-    map.labelMeridianAtParallel(-90, size=8, color='#888888', loc='top', meridians=np.arange(0,360,30))
+    # remove labels at the south pole
+    map.labelMeridianAtParallel(-90, meridians=[])
 
     # add footprint, retain the polygon for clipping
     footprint = map.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
