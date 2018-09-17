@@ -83,6 +83,22 @@ class BaseProjection(object):
         """
         pass
 
+    @property
+    def poleIsPoint(self):
+        try:
+            return self._poleIsPoint
+        except AttributeError:
+            self._poleIsPoint = {}
+            N = 10
+            rnd_meridian = -180 + 360*np.random.rand(N) + self.ra_0
+            for deg in [-90, 90]:
+                line = self.transform(rnd_meridian, deg*np.ones(N))
+                if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
+                    self._poleIsPoint[deg] = False
+                else:
+                    self._poleIsPoint[deg] = True
+            return self._poleIsPoint
+
     def _wrapRA(self, ra):
         ra_, isArray = _toArray(ra)
         ra_ = self.ra_0 - ra_ # inverse for RA
@@ -319,14 +335,23 @@ class LambertConformal(ConicProjection, Projection):
         super(LambertConformal, self).__init__(ra_0, dec_0, dec_1, dec_2)
 
         # Snyder 1987, eq. 14-1, 14-2 and 15-1 to 15-3.
-        self.dec_max = 89.99
-
+        self.dec_max = 89.999
         dec_1 *= DEG2RAD
         dec_2 *= DEG2RAD
         self.n = np.log(np.cos(dec_1)/np.cos(dec_2)) / \
         (np.log(np.tan(np.pi/4 + dec_2/2)/np.tan(np.pi/4 + dec_1/2)))
         self.F = np.cos(dec_1)*(np.tan(np.pi/4 + dec_1/2)**self.n)/self.n
         self.rho_0 = self._rho(dec_0)
+
+    @property
+    def poleIsPoint(self):
+        # because of dec_max: the pole isn't reached
+        self._poleIsPoint = {90: False, -90: False}
+        if self.n >= 0:
+            self._poleIsPoint[90] = True
+        else:
+            self._poleIsPoint[-90] = True
+        return self._poleIsPoint
 
     def _rho(self, dec):
         # check that dec is inside of -dec_max .. dec_max
@@ -573,30 +598,25 @@ class Tobler(HyperElliptical):
     See Snyder (1993, p. 202) for details.
     """
     def __init__(self, ra_0):
-        alpha, k, gamma = 0, 2.5, 1.183136
+        alpha, k, gamma = 0., 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
 
 class Mollweide(HyperElliptical):
     def __init__(self, ra_0):
-        alpha, k, gamma = 0, 2, 1.2731
+        alpha, k, gamma = 0., 2., 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
 
 class Collignon(HyperElliptical):
     def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0, 1
+        alpha, k = 0., 1.
         super(Collignon, self).__init__(ra_0, alpha, k, gamma)
 
 class EckertII(HyperElliptical):
     def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0.5, 1
+        alpha, k = 0.5, 1.
         super(EckertII, self).__init__(ra_0, alpha, k, gamma)
 
 class EckertIV(HyperElliptical):
     def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0.5, 2
+        alpha, k = 0.5, 2.
         super(EckertIV, self).__init__(ra_0, alpha, k, gamma)
-
-class HyperCloid(HyperElliptical):
-    def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0, 1.5
-        super(HyperCloid, self).__init__(ra_0, alpha, k, gamma)

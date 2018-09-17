@@ -231,17 +231,12 @@ class Map():
         facecolor_ = kwargs.pop('facecolor', '#dddddd')
 
         # polygon of the map edge: top, left, bottom, right
-        # don't poles if that's a single point
-        lines = [self._getParallel(90), self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getParallel(-90, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]
-        self.edge_is_point = {}
-        keys = [(90, 'parallel'),(self.proj.ra_0 + 180, 'meridian'),(-90, 'parallel'),(self.proj.ra_0 - 180, 'meridian')]
-        for loc,line in zip(keys, lines):
-            if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
-                self.edge_is_point[loc] = False
-                lines.append(line)
-            else:
-                self.edge_is_point[loc] = True
-
+        # don't draw poles if that's a single point
+        lines = [self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]
+        if not self.proj.poleIsPoint[-90]:
+            lines.insert(1, self._getParallel(-90, reverse=True))
+        if not self.proj.poleIsPoint[90]:
+            lines.insert(0, self._getParallel(90))
         xy = np.concatenate(lines, axis=1).T
         self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
         self.ax.add_patch(self._edge)
@@ -306,10 +301,18 @@ class Map():
             else:
                 if method == 'labelMeridianAtParallel':
                     degs = [-90, 90]
+                    done = False
+                    for deg in degs:
+                        if not self.proj.poleIsPoint[deg]:
+                            getattr(self, method)(deg)
+                            done = True
+                    if not done:
+                        deg  = 0
+                        getattr(self, method)(deg, meridians=_meridians[1:-1])
                 else:
                     degs = [self.proj.ra_0 + 180, self.proj.ra_0 - 180]
-                for deg in degs:
-                    getattr(self, method)(deg)
+                    for deg in degs:
+                        getattr(self, method)(deg)
 
     def _negateLoc(self, loc):
         if loc == "bottom":
@@ -324,8 +327,7 @@ class Map():
     def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
         arguments = _parseArgs(locals())
 
-        key = (p, 'parallel')
-        if key in self.edge_is_point.keys() and self.edge_is_point[key]:
+        if p in self.proj.poleIsPoint.keys() and self.proj.poleIsPoint[p]:
             return
 
         myname = 'labelMeridianAtParallel'
@@ -391,10 +393,6 @@ class Map():
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
         arguments = _parseArgs(locals())
-
-        key = (m, 'meridian')
-        if key in self.edge_is_point.keys() and self.edge_is_point[key]:
-            return
 
         myname = 'labelParallelAtMeridian'
         if myname not in self._config.keys():
