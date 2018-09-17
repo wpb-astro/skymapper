@@ -37,21 +37,8 @@ def _optimize(proj_cls, x0, ra, dec, reduce_fct, bounds=None):
     return proj_cls(*x)
 
 
-# metaclass for registration.
-# see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
-from . import register_projection, projection_register
-class Meta(type):
-    def __new__(meta, name, bases, class_dict):
-        cls = type.__new__(meta, name, bases, class_dict)
-        register_projection(cls)
-        return cls
-
 class BaseProjection(object):
     """Projection base class
-
-    NOTE: Do not directly derive from `BaseProjection`, use `Projection` instead.
-    This will automatically register the projection and make it available to
-    functions that query projections.
 
     Every projection needs to implement three methods:
     * `transform(self, ra, dec)`: mapping from ra/dec to map x/y
@@ -185,16 +172,32 @@ class BaseProjection(object):
         bounds = ((0, 360),)
         return _optimize(cls, x0, ra, dec, reduce_fct, bounds=bounds)
 
+
+# metaclass for registration.
+# see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
+from . import register_projection, projection_register
+class Meta(type):
+    def __new__(meta, name, bases, class_dict):
+        cls = type.__new__(meta, name, bases, class_dict)
+
+        # remove those that are directly derived from BaseProjection
+        if BaseProjection not in bases:
+            register_projection(cls)
+
+        return cls
+
 class Projection(BaseProjection, metaclass=Meta):
     pass
 
 
-class ConicProjection(Projection):
+class ConicProjection(BaseProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         self.ra_0 = ra_0
         self.dec_0 = dec_0
         self.dec_1 = dec_1
         self.dec_2 = dec_2
+        if dec_1 > dec_2:
+            self.dec_1, self.dec_2 = self.dec_2, self.dec_1
 
     @classmethod
     def optimize(cls, ra, dec, bounds=None, reduce_fct=meanDistortion):
@@ -223,7 +226,7 @@ class ConicProjection(Projection):
         return _optimize(cls, x0, ra, dec, reduce_fct, bounds=bounds)
 
 
-class Albers(ConicProjection):
+class Albers(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Albers Equal-Area conic projection
 
@@ -289,7 +292,7 @@ class Albers(ConicProjection):
     def __repr__(self):
         return "Albers(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
-class LambertConformal(ConicProjection):
+class LambertConformal(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Lambert Conformal conic projection
 
@@ -362,7 +365,7 @@ class LambertConformal(ConicProjection):
         return "LambertConformal(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 
-class Equidistant(ConicProjection):
+class Equidistant(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
         """Equidistant conic projection
 
@@ -468,7 +471,7 @@ class Hammer(Projection):
         return "Hammer(%r)" % self.ra_0
 
 
-class HyperEllipticalProjection(Projection):
+class HyperElliptical(Projection):
 
     def __init__(self, ra_0, alpha, k, gamma):
         self.ra_0 = ra_0
@@ -564,7 +567,7 @@ class HyperEllipticalProjection(Projection):
             it += 1
         return y
 
-class Tobler(HyperEllipticalProjection):
+class Tobler(HyperElliptical):
     """Tobler hyperelliptical projection.
 
     See Snyder (1993, p. 202) for details.
@@ -573,27 +576,27 @@ class Tobler(HyperEllipticalProjection):
         alpha, k, gamma = 0, 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
 
-class Mollweide(HyperEllipticalProjection):
+class Mollweide(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0, 2, 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
 
-class Collignon(HyperEllipticalProjection):
+class Collignon(HyperElliptical):
     def __init__(self, ra_0, gamma=1.):
         alpha, k = 0, 1
         super(Collignon, self).__init__(ra_0, alpha, k, gamma)
 
-class EckertII(HyperEllipticalProjection):
+class EckertII(HyperElliptical):
     def __init__(self, ra_0, gamma=1.):
         alpha, k = 0.5, 1
         super(EckertII, self).__init__(ra_0, alpha, k, gamma)
 
-class EckertIV(HyperEllipticalProjection):
+class EckertIV(HyperElliptical):
     def __init__(self, ra_0, gamma=1.):
         alpha, k = 0.5, 2
         super(EckertIV, self).__init__(ra_0, alpha, k, gamma)
 
-class HyperCloid(HyperEllipticalProjection):
-    def __init__(self, ra_0, gamma=1):
+class HyperCloid(HyperElliptical):
+    def __init__(self, ra_0, gamma=1.):
         alpha, k = 0, 1.5
         super(HyperCloid, self).__init__(ra_0, alpha, k, gamma)
