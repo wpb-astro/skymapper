@@ -503,7 +503,7 @@ class HyperElliptical(Projection):
         self.alpha = alpha
         self.k = k
         self.gamma = gamma
-        self.gamma_pow_k = gamma**k
+        self.gamma_pow_k = np.abs(gamma)**k
         self.affine = np.sqrt(2 * self.gamma / np.pi)
 
     def transform(self, ra, dec):
@@ -605,18 +605,3 @@ class Mollweide(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0., 2., 1.2731
         super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
-
-class Collignon(HyperElliptical):
-    def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0., 1.
-        super(Collignon, self).__init__(ra_0, alpha, k, gamma)
-
-class EckertII(HyperElliptical):
-    def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0.5, 1.
-        super(EckertII, self).__init__(ra_0, alpha, k, gamma)
-
-class EckertIV(HyperElliptical):
-    def __init__(self, ra_0, gamma=1.):
-        alpha, k = 0.5, 2.
-        super(EckertIV, self).__init__(ra_0, alpha, k, gamma)
