@@ -53,7 +53,7 @@ def degPMFormatter(deg):
     Return:
         String
     """
-    format = "%d$^\circ$"
+    format = "$%d^\circ$"
     if deg > 0:
         format = "$+$" + format
     if deg < 0:
@@ -346,17 +346,26 @@ class Map():
         if meridians is None:
             meridians = self.meridians
 
-        if loc is None:
-            if p >= 0:
-                loc = 'top'
-            else:
-                loc = 'bottom'
+        # determine rot_base so that central label is upright
+        rotation = kwargs.pop('rotation', None)
+        if rotation is None or loc is None:
+            m = self.proj.ra_0
+            dxy = self.proj.gradient(m, p, direction=direction)
+            angle = np.arctan2(*dxy) / DEG2RAD
+            options = [-90, 90]
+            closest = np.argmin(np.abs(options - angle))
+            rot_base = options[closest]
+
+            if loc is None:
+                if p >= 0:
+                    loc = 'top'
+                else:
+                    loc = 'bottom'
         assert loc in ['top', 'bottom']
 
         horizontalalignment = kwargs.pop('horizontalalignment', 'center')
         verticalalignment = kwargs.pop('verticalalignment', self._negateLoc(loc))
         zorder = kwargs.pop('zorder', 20)
-        rotation = kwargs.pop('rotation', None)
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         # styling consistent with frame, i.e. with edge
         color = kwargs.pop('color', self._edge.get_edgecolor())
@@ -366,21 +375,12 @@ class Map():
         if pad is None:
             pad = size / 3
 
-        # determine rot_base so that central label is upright
-        if rotation is None:
-            m = self.proj.ra_0
-            dxy = self.proj.gradient(m, p, direction=direction)
-            angle = np.arctan2(*dxy) / DEG2RAD
-            options = np.arange(-2,3) * 90 # multiples of 90 deg
-            closest = np.argmin(np.abs(options - angle))
-            rot_base = options[closest]
-
         for m in meridians:
             # move label along meridian
             xp, yp = self.proj.transform(m, p)
             dxy = self.proj.gradient(m, p, direction="meridian")
             dxy *= pad / np.sqrt((dxy**2).sum())
-            if loc == 'bottom':
+            if loc == 'bottom': # dxy in positive RA
                 dxy *= -1
 
             if rotation is None:
@@ -407,20 +407,31 @@ class Map():
 
         self._config[myname][m] = arguments
 
+        # determine rot_base so that central label is upright
+        rotation = kwargs.pop('rotation', None)
+        if rotation is None or loc is None:
+            p = 0
+            dxy = self.proj.gradient(m, p, direction=direction)
+            angle = np.arctan2(*dxy) / DEG2RAD
+            options = [-90, 90]
+            closest = np.argmin(np.abs(options - angle))
+            rot_base = options[closest]
+
+            if loc is None:
+                if m < self.proj.ra_0: # meridians on the left: dx goes in positive RA
+                    dxy *= -1
+                if dxy[0] > 0:
+                    loc = 'right'
+                else:
+                    loc = 'left'
+        assert loc in ['left', 'right']
+
         if parallels is None:
             parallels = self.parallels
-
-        if loc is None:
-            if m <= 0:
-                loc = 'right'
-            else:
-                loc = 'left'
-        assert loc in ['left', 'right']
 
         horizontalalignment = kwargs.pop('horizontalalignment', self._negateLoc(loc))
         verticalalignment = kwargs.pop('verticalalignment', 'center')
         zorder = kwargs.pop('zorder', 20)
-        rotation = kwargs.pop('rotation', None)
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         # styling consistent with frame, i.e. with edge
         color = kwargs.pop('color', self._edge.get_edgecolor())
@@ -428,28 +439,19 @@ class Map():
         zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
 
         if pad is None:
-            pad = size / 3
-
-        # determine rot_base so that central label is upright
-        if rotation is None:
-            p = 0
-            dxy = self.proj.gradient(m, p, direction=direction)
-            angle = np.arctan2(*dxy) / DEG2RAD
-            options = np.arange(-2,3) * 90
-            closest = np.argmin(np.abs(options - angle))
-            rot_base = options[closest]
+            pad = size/2 # more space for horizontal parallels
 
         for p in parallels:
             # move label along parallel
             xp, yp = self.proj.transform(m, p)
             dxy = self.proj.gradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
-            if loc == 'right':
+            if m < self.proj.ra_0: # meridians on the left: dx goes in positive RA
                 dxy *= -1
 
             if rotation is None:
                 dxy_ = self.proj.gradient(m, p, direction=direction)
-                angle = rot_base-np.arctan2(*dxy_) / DEG2RAD
+                angle = rot_base - np.arctan2(*dxy_) / DEG2RAD
             else:
                 angle = rotation
 
