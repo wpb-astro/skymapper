@@ -97,12 +97,12 @@ def _parseArgs(locals):
     return locals
 
 class Map():
-    def __init__(self, proj, ax=None, resolution=75, interactive=True, **kwargs):
+    def __init__(self, proj, ax=None, interactive=True, **kwargs):
         # store arguments to regenerate the map
         self._config = {'__init__': _parseArgs(locals())}
         self.proj = proj
-        self.resolution = resolution
         self._setFigureAx(ax, interactive=interactive)
+        self._resolution = 75
         self._setEdge(**kwargs)
         self.ax.relim()
         self.ax.autoscale_view()
@@ -151,7 +151,7 @@ class Map():
             with open(filename, 'rb') as fp:
                 config = pickle.load(fp)
                 fp.close()
-                return Map._create(config)
+                return Map._create(config, ax=ax)
         except IOError as e:
             raise
 
@@ -219,8 +219,8 @@ class Map():
         return artist
 
     def _setEdge(self, **kwargs):
-        self._dec_range = np.linspace(-90, 90, self.resolution)
-        self._ra_range = np.linspace(-180, 180, self.resolution) + self.proj.ra_0
+        self._dec_range = np.linspace(-90, 90, self._resolution)
+        self._ra_range = np.linspace(-180, 180, self._resolution) + self.proj.ra_0
 
         # styling: frame needs to be on top of everything, must be transparent
         facecolor = 'None'
@@ -255,8 +255,8 @@ class Map():
 
     def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         self._config['grid'] = _parseArgs(locals())
-        self._dec_range = np.linspace(dec_min, dec_max, self.resolution)
-        self._ra_range = np.linspace(ra_min, ra_max, self.resolution) + self.proj.ra_0
+        self._dec_range = np.linspace(dec_min, dec_max, self._resolution)
+        self._ra_range = np.linspace(ra_min, ra_max, self._resolution) + self.proj.ra_0
         _parallels = np.arange(-90+sep,90,sep)
         if self.proj.ra_0 % sep == 0:
             _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep - 1), -sep)
