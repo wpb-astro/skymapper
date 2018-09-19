@@ -42,7 +42,7 @@ def degFormatter(deg):
     Returns:
         string
     """
-    return "$%d^\circ$" % deg
+    return "${:d}^\circ$".format(int(deg))
 
 def degPMFormatter(deg):
     """String formatter for "+-%d^\circ"
@@ -53,12 +53,8 @@ def degPMFormatter(deg):
     Return:
         String
     """
-    format = "$%d^\circ$"
-    if deg > 0:
-        format = "$+$" + format
-    if deg < 0:
-        format = "$-$" + format
-    return format % np.abs(deg)
+
+    return "${:+d}^\circ$".format(int(deg))
 
 def deg360Formatter(deg):
         """Default formatter for map labels.
@@ -70,7 +66,7 @@ def deg360Formatter(deg):
         """
         if deg < 0:
             deg += 360
-        return "$%d^\circ$" % deg
+        return degFormatter(deg)
 
 def hourAngleFormatter(ra):
     """String formatter for "hh:mm"
@@ -83,10 +79,11 @@ def hourAngleFormatter(ra):
     """
     if ra < 0:
         ra += 360
-    hours = int(ra)/15
+    hours = int(ra//15)
     minutes = int(float(ra - hours*15)/15 * 60)
-    minutes = '{:>02}'.format(minutes)
-    return "%d:%sh" % (hours, minutes)
+    if minutes:
+        return "${:d}^{{{:>02}}}$h".format(hours, minutes)
+    return "${:d}$h".format(hours)
 
 def _parseArgs(locals):
     # turn list of arguments (all named or kwargs) into lfat dictionary
@@ -457,7 +454,7 @@ class Map():
 
             self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
-    def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, **kwargs):
+    def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, description='RA', **kwargs):
         assert loc in ['bottom', 'top']
 
         arguments = _parseArgs(locals())
@@ -493,6 +490,7 @@ class Map():
         poss = {"bottom": 0, "top": 1}
         pos = poss[loc]
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        xticks = []
         frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
         if loc in frame_locs:
@@ -520,8 +518,24 @@ class Map():
                         # because those cannot be shifted by a constant point amount to
                         # follow the graticule
                         self.ax.annotate(self._config['grid']['meridian_fmt'](m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
+                        xticks.append(x_im)
 
-    def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, **kwargs):
+            if description is not None:
+                # find gap in middle of axis
+                xticks.insert(0, 0)
+                xticks.append(1)
+                xticks = np.array(xticks)
+                gaps = (xticks[1:] + xticks[:-1]) / 2
+                center_gap = np.argmin(np.abs(gaps - 0.5))
+                x_im = gaps[center_gap]
+                y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
+                dxy = [0, pad]
+                if loc == "bottom":
+                    dxy[1] *= -1
+                self.ax.annotate(description, (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label-description', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
+
+
+    def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, description=None, **kwargs):
         assert loc in ['left', 'right']
 
         arguments = _parseArgs(locals())
@@ -557,6 +571,7 @@ class Map():
         poss = {"left": 0, "right": 1}
         pos = poss[loc]
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        yticks = []
         frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
         if loc in frame_locs:
@@ -583,6 +598,22 @@ class Map():
                         # because those cannot be shifted by a constant point amount to
                         # follow the graticule
                         self.ax.annotate(self._config['grid']['parallel_fmt'](p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder,  **kwargs)
+                        yticks.append(y_im)
+
+            if description is not None:
+                # find gap in middle of axis
+                yticks.insert(0, 0)
+                yticks.append(1)
+                yticks = np.array(yticks)
+                gaps = (yticks[1:] + yticks[:-1]) / 2
+                center_gap = np.argmin(np.abs(gaps - 0.5))
+                y_im = gaps[center_gap]
+                x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
+                dxy = [pad, 0]
+                if loc == "left":
+                    dxy[0] *= -1
+                self.ax.annotate(description, (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label-description', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
+
 
     def _setFrame(self):
         # clean up existing frame
