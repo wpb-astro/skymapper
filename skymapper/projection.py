@@ -30,7 +30,7 @@ def _optimize_objective(x, proj_type, ra, dec, reduce_fct):
     return reduce_fct(a,b)
 
 def _optimize(proj_cls, x0, ra, dec, reduce_fct, bounds=None):
-    print ("optimizing parameters for %r" % proj_cls)
+    print ("optimizing parameters of %s to minimize %s" % (proj_cls.__name__, reduce_fct.__name__))
     from scipy.optimize import fmin_l_bfgs_b
     x, fmin, d = fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, reduce_fct), bounds=bounds, approx_grad=True)
     print ("Best objective %.6f at %r" % (fmin, x))
@@ -169,8 +169,8 @@ class BaseProjection(object):
         h = np.sqrt(jac[:,0,1]**2 + jac[:,1,1]**2)
         k = np.sqrt(jac[:,0,0]**2 + jac[:,1,0]**2) / cos_phi
         sin_t = (jac[:,1,1]*jac[:,0,0] - jac[:,0,1]*jac[:,1,0])/(h*k*cos_phi)
-        a_ = np.sqrt(h*h + k*k + 2*h*k*sin_t)
-        b_ = np.sqrt(h*h + k*k - 2*h*k*sin_t)
+        a_ = np.sqrt(np.maximum(h*h + k*k + 2*h*k*sin_t, 0)) # can be very close to 0
+        b_ = np.sqrt(np.maximum(h*h + k*k - 2*h*k*sin_t, 0))
         a = (a_ + b_) / 2
         b = (a_ - b_) / 2
         s = h*k*sin_t
@@ -450,7 +450,7 @@ class Equidistant(ConicProjection, Projection):
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        ra = self._unwrapRA(theta/self.n),
+        ra = self._unwrapRA(theta/self.n)
         dec = (self.G - rho)/ DEG2RAD
         return ra, dec
 
