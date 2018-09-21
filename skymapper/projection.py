@@ -496,6 +496,50 @@ class Hammer(Projection):
         return "Hammer(%r)" % self.ra_0
 
 
+class Mollweide(Projection):
+    def __init__(self, ra_0):
+        self.ra_0 = ra_0
+        self.sqrt2 = np.sqrt(2)
+
+    def transform(self, ra, dec):
+        # Snyder p. 251
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        theta_ = self.theta(dec_)
+        x = 2*self.sqrt2 / np.pi * (ra_ * DEG2RAD) * np.cos(theta_)
+        y = self.sqrt2 * np.sin(theta_)
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
+
+    def theta(self, dec, eps=1e-6, maxiter=100):
+        # Snyder 1987 p. 251
+        dec_ = dec * DEG2RAD
+        t0 = dec_
+        mask = np.abs(dec_) < np.pi/2
+        if mask.any():
+            t = t0[mask]
+            for it in range(maxiter):
+                t_ = t - (2*t + np.sin(2*t) - np.pi*np.sin(dec_[mask]))/(2 + 2*np.cos(2*t))
+                if (np.abs(t - t_) < eps).all():
+                    t = t_
+                    break
+                t = t_
+            t0[mask] = t
+        return t0
+
+    def invert(self, x, y):
+        theta_ = np.arcsin(y/self.sqrt2)
+        ra = self._unwrapRA(np.pi*x/(2*self.sqrt2*np.cos(theta_)) / DEG2RAD)
+        dec = np.arcsin((2*theta_ + np.sin(2*theta_))/np.pi) / DEG2RAD
+        return ra, dec
+
+    def contains(self, x, y):
+        dz = x*x/16 + y*y/4
+        return dz <= 0.5
+
 class HyperElliptical(Projection):
 
     def __init__(self, ra_0, alpha, k, gamma):
@@ -600,8 +644,3 @@ class Tobler(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0., 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
-
-class Mollweide(HyperElliptical):
-    def __init__(self, ra_0):
-        alpha, k, gamma = 0., 2., 1.2731
-        super(Mollweide, self).__init__(ra_0, alpha, k, gamma)
