@@ -80,11 +80,11 @@ The essential parts of the workflow are
 2. Setting up a `Map` to hold the projection and matplotlib figure, ax, ...
 3. Add data to the map
 
-Several map projections are available, both for all-sky work (e.g. `Hammer` and `Mollweide`) and for smaller areas. The full list is stored in the dictionary `projection_register`. If this doesn't include a projection you want, open an issue, or better: create it yourself (see below)
+Several map projections are available, the full list is stored in the dictionary `projection_register`. If the projection you want isn't included, open an issue, or better: create it yourself (see below).
 
-Since most ground-based surveys have predominant East-West coverage, which is why we suggest using conic projections, in particular the equal-area `Albers` conic (an discussion why exactly that one is [here](http://pmelchior.net/blog/map-projections-for-surveys.html)).
+Since most ground-based surveys have predominant East-West coverage, we suggest using conic projections, in particular the equal-area `Albers` conic (an discussion why exactly that one is [here](http://pmelchior.net/blog/map-projections-for-surveys.html)).
 
-Map projections can preserve sky area, angles, or distances, but never all three. That means defining a suitable projection amounts to a compromise. We think that sizes should most often be exactly preserved, which means that angles and distances may not be. The optimal projection for a given list of `ra`, `dec` can be found by calling:
+Map projections can preserve sky area, angles, or distances, but never all three. That means defining a suitable projection must be a compromise. For most applications, sizes should exactly be preserved, which means that angles and distances may not be. The optimal projection for a given list of `ra`, `dec` can be found by calling:
 
 
 ```python
@@ -92,27 +92,27 @@ crit = skm.projection.stdDistortion
 proj = skm.Albers.optimize(ra, dec, reduce_fct=crit)
 ```
 
-This optimizes the `Albers` parameters to minimize the variance of the map distortion (i.e. the apparent ellipticity of an circle on the sky). Alternative criteria are e.g. `maxDistortion` or `stdScale` (for projections that are not equal-area.)
+This optimizes the `Albers` parameters to minimize the variance of the map distortion (i.e. the apparent ellipticity of a true circle on the sky). Alternative criteria are e.g. `maxDistortion` or `stdScale` (for projections that are not equal-area.)
 
 ### Defining a survey
 
-To make it easy to share survey footprints and optimal projections, we can hold them in a common place. To create one you only need to derive a class from [`BaseSurvey`](skymapper/survey/__init__.py), which only has two functions:
+To make it easy to share survey footprints and optimal projections, we can hold them in a common place. To create one you only need to derive a class from [`Survey`](skymapper/survey/__init__.py), which only needs to implement two methods:
 
 * `getFootprint` to return a RA, Dec list of the footprint
 * `getConfigfile` to return the full path of a pickled map configuration, saved by `Map.save`. 
 
 ### Defining a projection
 
-Have a look at [`BaseProjection`](skymapper/projection.py). You'll see that every projection needs to implement three methods: 
+For constructing your own projection, derive from [`Projection`](skymapper/projection.py). You'll see that every projection needs to implement three methods: 
 
 * `transform` to map from RA/Dec to map coordinates x/y
 * `invert` to map from x/y to RA/Dec
 * `contains` to test whether a given x/y is a valid map coordinate
 
-If the projection has several parameters, you will want to create a special `optimize` method, as the default one only determines the best RA reference.
+If the projection has several parameters, you will want to create a special `@classmethod optimize` because the default one only determines the best RA reference. An example for that is given in e.g. `ConicProjection.optimize`.
 
 ### Limitation(s)
 
-The projection is *not* a [matplotlib transformation](http://matplotlib.org/users/transforms_tutorial.html). Among several reasons, it is very difficult (maybe impossible) to work with the `matplotlib.Axes` that are not rectangles or ellipses. While `skymapper` tries to follow matplotlib conventions very closely, some methods may not work properly. Open an issue if you think you found such a case.
+The projection is *not* a [matplotlib transformation](http://matplotlib.org/users/transforms_tutorial.html). Among several reasons, it is very difficult (maybe impossible) to work with the `matplotlib.Axes` that are not rectangles or ellipses. So, we decided to make use of matplotlib for lower-level graphics primitive and to layer to map-making on top of it. This way, we can control e.g. the interpolation method on the sphere or the location of the tick labels in a way consistent with visual expectations from hundreds of years of cartography. While `skymapper` tries to follow matplotlib conventions very closely, some methods may not work as expected. Open an issue if you think you found such a case.
 
 In particular, we'd appreciate help to make sure that the interactive features work well on all matplotlib backends.
