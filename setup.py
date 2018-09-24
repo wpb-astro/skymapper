@@ -13,7 +13,7 @@ setup(
     author_email="peter.m.melchior@gmail.com",
     url="https://github.com/pmelchior/skymapper",
     packages=["skymapper", "skymapper.survey"],
-    package_data={"skymapper.survey": ['*.txt']}
+    package_data={"skymapper.survey": ['*.txt']},
     classifiers=[
         "Development Status :: 4 - Beta",
         "License :: OSI Approved :: MIT License",
