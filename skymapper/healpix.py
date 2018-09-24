@@ -9,6 +9,18 @@ try:
         xrange = range
 
     def getHealpixVertices(pixels, nside, nest=False):
+        """Get polygon vertices for list of HealPix pixels.
+
+        Requires: healpy
+
+        Args:
+            pixels: list of HealPix pixels
+            nside: HealPix nside
+            nest: HealPix nesting scheme
+
+        Returns:
+            vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
+        """
         vertices = np.zeros((pixels.size, 4, 2))
         for i in xrange(pixels.size):
             corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i], nest=nest)))

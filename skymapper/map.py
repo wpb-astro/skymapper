@@ -10,6 +10,7 @@ from matplotlib.patches import Polygon
 DEG2RAD = np.pi/180
 
 def skyDistance(radec, radec_ref):
+    """Compute distance on the curved sky"""
     ra, dec = radec
     ra_ref, dec_ref = radec_ref
     ra_diff = np.abs(ra - ra_ref)
@@ -86,7 +87,7 @@ def hourAngleFormatter(ra):
     return "${:d}$h".format(hours)
 
 def _parseArgs(locals):
-    # turn list of arguments (all named or kwargs) into lfat dictionary
+    """Turn list of arguments (all named or kwargs) into flat dictionary"""
     locals.pop('self')
     kwargs = locals.pop('kwargs', {})
     for k,v in kwargs.items():
@@ -95,11 +96,33 @@ def _parseArgs(locals):
 
 class Map():
     def __init__(self, proj, ax=None, interactive=True, **kwargs):
+        """Create Map with a given projection.
+
+        A `skymapper.Map` holds a predefined projection and `matplotlib` axes
+        and figures to enable plotting on the sphere with proper labeling
+        and inter/extrapolations.
+
+        It also allows for interactive and exploratory work by updateing the
+        maps after pan/zoom events.
+
+        Most of the methods are wrappers of `matplotlib` functions by the same
+        names, so that one can mostly interact with a `Map` instance as one
+        would do with a `matplotlib.axes`.
+
+        For plotting purposes, it is recommended to switch `interactive` off.
+
+        Args:
+            proj: `skymapper.Projection` instance
+            ax: `matplotlib.axes` instance, will be created otherwise
+            interactive: if pan/zoom is enabled for map updates
+            **kwargs: styling of the `matplotlib.patches.Polygon` that shows
+                the outline of the map.
+        """
         # store arguments to regenerate the map
         self._config = {'__init__': _parseArgs(locals())}
         self.proj = proj
         self._setFigureAx(ax, interactive=interactive)
-        self._resolution = 75
+        self._resolution = 75 # for graticules
         self._setEdge(**kwargs)
         self.ax.relim()
         self.ax.autoscale_view()
@@ -127,12 +150,29 @@ class Map():
             self._scroll_evt = self.fig.canvas.mpl_connect('scroll_event', self._scrollHandler)
 
     def clone(self, ax=None):
+        """Clone map
+
+        Args:
+            ax: `matplotlib.axes` instance, will be created otherwise
+        Returns:
+            New map using the same projections and configuration
+        """
         config = dict(self._config)
         config['xlim'] = self.ax.get_xlim()
         config['ylim'] = self.ax.get_ylim()
         return Map._create(config, ax=ax)
 
     def save(self, filename):
+        """Save map configuration to file
+
+        All aspects necessary to reproduce a map are stored in a pickle file.
+
+        Args:
+            filename: name for pickle file
+
+        Returns:
+            None
+        """
         try:
             with open(filename, 'wb') as fp:
                 config = dict(self._config)
@@ -144,6 +184,14 @@ class Map():
 
     @staticmethod
     def load(filename, ax=None):
+        """Load map from pickled file
+
+        Args:
+            filename: name for pickle file
+            ax: `matplotlib.axes` instance, will be created otherwise
+        Returns:
+            `skymapper.Map`
+        """
         try:
             with open(filename, 'rb') as fp:
                 config = pickle.load(fp)
@@ -180,13 +228,25 @@ class Map():
 
     @property
     def parallels(self):
+        """Get the location of the drawn parallels"""
         return [ float(m.group(1)) for c,m in self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True) ]
 
     @property
     def meridians(self):
+        """Get the location of the drawn meridians"""
         return [ float(m.group(1)) for c,m in self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True) ]
 
     def artists(self, gid, regex=False):
+        """Get the `matplotlib` artists used in the map
+
+        Args:
+            gid: `gid` string of the artist
+            regex: if regex matching is done
+
+        Returns:
+            list of matching artists
+            if `regex==True`, returns list of (artist, match)
+        """
         if regex:
             matches = [ re.match(gid, c.get_gid()) if c.get_gid() is not None else None for c in self.ax.get_children() ]
             return [ (c,m) for c,m in zip(self.ax.get_children(), matches) if m is not None ]
@@ -245,12 +305,26 @@ class Map():
             self.ax.add_patch(poly)
 
     def xlim(self):
+        """Get the map limits in x-direction"""
         return (self._edge.xy[:, 0].min(), self._edge.xy[:, 0].max())
 
     def ylim(self):
+        """Get the map limits in x-direction"""
         return (self._edge.xy[:, 1].min(), self._edge.xy[:, 1].max())
 
     def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+        """Set map grid / graticules
+
+        Args:
+            sep: distance between graticules in deg
+            parallel_fmt: formatter for parallel labels
+            meridian_fmt: formatter for meridian labels
+            dec_min: minimum declination for graticules
+            dec_max: maximum declination for graticules
+            ra_min: minimum declination for graticules (for which reference RA=0)
+            ra_max: maximum declination for graticules (for which reference RA=0)
+            **kwargs: styling of `matplotlib.lines.Line2D` for the graticules
+        """
         self._config['grid'] = _parseArgs(locals())
         self._dec_range = np.linspace(dec_min, dec_max, self._resolution)
         self._ra_range = np.linspace(ra_min, ra_max, self._resolution) + self.proj.ra_0
@@ -322,6 +396,18 @@ class Map():
             return "left"
 
     def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+        """Label the meridians intersecting a given parallel
+
+        The method is called by `grid()` but can be used to overwrite the defaults.
+
+        Args:
+            p: parallel in deg
+            loc: location of the label with respect to `p`, from `['top', 'bottom']`
+            meridians: list of meridians to label, if None labels all of them
+            pad: padding of annotation, in units of fontsize
+            direction: tangent of the label, from `['parallel', 'meridian']`
+            **kwargs: styling of `matplotlib` annotations for the graticule labels
+        """
         arguments = _parseArgs(locals())
 
         if p in self.proj.poleIsPoint.keys() and self.proj.poleIsPoint[p]:
@@ -389,6 +475,18 @@ class Map():
             self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
     def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+        """Label the parallel intersecting a given meridian
+
+        The method is called by `grid()` but can be used to overwrite the defaults.
+
+        Args:
+            m: meridian in deg
+            loc: location of the label with respect to `m`, from `['left', 'right']`
+            parallel: list of parallels to label, if None labels all of them
+            pad: padding of annotation, in units of fontsize
+            direction: tangent of the label, from `['parallel', 'meridian']`
+            **kwargs: styling of `matplotlib` annotations for the graticule labels
+        """
         arguments = _parseArgs(locals())
 
         myname = 'labelParallelAtMeridian'
@@ -455,6 +553,20 @@ class Map():
             self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
     def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, description='RA', **kwargs):
+        """Label the meridians on rectangular frame of the map
+
+        If the view only shows a fraction of the map, a segment or an entire
+        rectangular frame is shown and the graticule labels are moved to outside
+        that frame. This method is implicitly called, but can be used to overwrite
+        the defaults.
+
+        Args:
+            loc: location of the label with respect to frame, from `['top', 'bottom']`
+            meridians: list of meridians to label, if None labels all of them
+            pad: padding of annotation, in units of fontsize
+            description: equivalent to `matplotlib` axis label
+            **kwargs: styling of `matplotlib` annotations for the graticule labels
+        """
         assert loc in ['bottom', 'top']
 
         arguments = _parseArgs(locals())
@@ -536,6 +648,20 @@ class Map():
 
 
     def labelParallelsAtFrame(self, loc='left', parallels=None, pad=None, description=None, **kwargs):
+        """Label the parallels on rectangular frame of the map
+
+        If the view only shows a fraction of the map, a segment or an entire
+        rectangular frame is shown and the graticule labels are moved to outside
+        that frame. This method is implicitly called, but can be used to overwrite
+        the defaults.
+
+        Args:
+            loc: location of the label with respect to frame, from `['left', 'right']`
+            parallels: list of parallels to label, if None labels all of them
+            pad: padding of annotation, in units of fontsize
+            description: equivalent to `matplotlib` axis label
+            **kwargs: styling of `matplotlib` annotations for the graticule labels
+        """
         assert loc in ['left', 'right']
 
         arguments = _parseArgs(locals())
@@ -734,14 +860,17 @@ class Map():
 
     #### common plot type for maps: follow mpl convention ####
     def plot(self, ra, dec, *args, **kwargs):
+        """Matplotlib `plot` with `ra/dec` points transformed according to map projection"""
         x, y = self.proj.transform(ra, dec)
         return self.ax.plot(x, y, *args, **kwargs)
 
     def scatter(self, ra, dec, **kwargs):
+        """Matplotlib `scatter` with `ra/dec` points transformed according to map projection"""
         x, y = self.proj.transform(ra, dec)
         return self.ax.scatter(x, y, **kwargs)
 
     def hexbin(self, ra, dec, C=None, **kwargs):
+        """Matplotlib `hexbin` with `ra/dec` points transformed according to map projection"""
         x, y = self.proj.transform(ra, dec)
         # determine proper gridsize: by default x is only needed, y is chosen accordingly
         gridsize = kwargs.pop("gridsize", None)
@@ -764,6 +893,16 @@ class Map():
         return artist
 
     def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
+        """Matplotlib `text` with coordinates given by `ra/dec`.
+
+        Args:
+            ra: rectascension of text
+            dec: declination of text
+            s: string
+            rotation: if text should be rotated to tangent direction
+            direction: tangent direction, from `['parallel', 'meridian']`
+            **kwargs: styling arguments for `matplotlib.text`
+        """
         x, y = self.proj.transform(ra, dec)
 
         if rotation is None:
@@ -775,6 +914,18 @@ class Map():
         return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", clip_on=True, **kwargs)
 
     def colorbar(self, cb_collection, cb_label="", orientation="vertical", size="2%", pad="1%"):
+        """Add colorbar to side of map.
+
+        The location of the colorbar will be chosen automatically to not interfere
+        with the map frame labels.
+
+        Args:
+            cb_collection: a `matplotlib` mappable collection
+            cb_label: string for colorbar label
+            orientation: from ["vertical", "horizontal"]
+            size: fraction of ax size to use for colorbar
+            pad: fraction of ax size to use as pad to map frame
+        """
         assert orientation in ["vertical", "horizontal"]
 
         # pick the side that does not have the tick labels
@@ -794,6 +945,15 @@ class Map():
         return cb
 
     def focus(self, ra, dec, pad=0.025):
+        """Focus onto region of map covered by `ra/dec`
+
+        Adjusts x/y limits to encompass given `ra/dec`.
+
+        Args:
+            ra: list of rectascensions
+            dec: list of declinations
+            pad: distance to edge of the frame, in units of axis size
+        """
         # to replace the autoscale function that cannot zoom in
         x, y = self.proj.transform(ra, dec)
         xlim = [x.min(), x.max()]
@@ -810,6 +970,11 @@ class Map():
         self.fig.canvas.draw()
 
     def defocus(self, pad=0.025):
+        """Show entire map.
+
+        Args:
+            pad: distance to edge of the map, in units of axis size
+        """
         # to replace the autoscale function that cannot zoom in
         xlim, ylim = list(self.xlim()), list(self.ylim())
         xrange = xlim[1]-xlim[0]
@@ -824,18 +989,25 @@ class Map():
         self.fig.canvas.draw()
 
     def show(self, *args, **kwargs):
+        """Show `matplotlib` figure"""
         self.fig.show(*args, **kwargs)
 
     def savefig(self, *args, **kwargs):
+        """Save `matplotlib` figure"""
         self.fig.savefig(*args, **kwargs)
 
     #### special plot types for maps ####
     def footprint(self, surveyname, **kwargs):
         """Plot survey footprint polygon onto map
 
+        Uses `get_footprint()` method of a `skymapper.Survey` derived class instance
+        The name of the survey is indentical to the class name.
+
+        All available surveys are listed in `skymapper.survey_register`.
+
         Args:
-            surveyname: name of the survey
-            **kwargs: matplotlib.collections.PolyCollection keywords
+            surveyname: name of the survey, must be in keys of `skymapper.survey_register`
+            **kwargs: styling of `matplotlib.collections.PolyCollection`
         """
         # search for survey in register
         ra, dec = survey_register[surveyname].getFootprint()

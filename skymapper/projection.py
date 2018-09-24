@@ -5,6 +5,11 @@ import scipy.optimize
 DEG2RAD = np.pi/180
 
 def _toArray(x):
+    """Convert x to array if needed
+
+    Returns:
+        array(x), boolean if x was an array before
+    """
     if isinstance(x, np.ndarray):
         return x, True
     if hasattr(x, '__iter__'):
@@ -12,27 +17,54 @@ def _toArray(x):
     return np.array([x]), False
 
 def ellipticity(a, b):
+    """Returns 1-abs(b/a)"""
     return 1-np.abs(b/a)
 def meanDistortion(a, b):
+    """Returns average `ellipticity` over all `a`,`b`"""
     return np.mean(ellipticity(a,b))
 def maxDistortion(a,b):
+    """Returns max `ellipticity` over all `a`,`b`"""
     return np.max(ellipticity(a,b))
 def stdDistortion(a,b):
+    """Returns `std(b/a)`"""
     return (b/a).std() # include the sign
 def stdScale(a,b):
+    """Returns `std(a*b)`
+
+    This is useful for conformal projections.
+    """
     return (a*b).std()
 def stdDistortionScale(a,b):
+    """Retruns sum of `stdScale` and `stdDistortion`.
+
+    This is useful for a compromise between equal-area and conformal projections.
+    """
     return stdScale(a,b) + stdDistortion(a,b)
 
-def _optimize_objective(x, proj_type, ra, dec, reduce_fct):
+def _optimize_objective(x, proj_type, ra, dec, crit):
+    """Construct projections from parameters `x` and compute `crit` for `ra, dec`"""
     proj = proj_type(*x)
     a, b = proj.distortion(ra, dec)
-    return reduce_fct(a,b)
+    return crit(a,b)
 
-def _optimize(proj_cls, x0, ra, dec, reduce_fct, bounds=None):
-    print ("optimizing parameters of %s to minimize %s" % (proj_cls.__name__, reduce_fct.__name__))
+def _optimize(proj_cls, x0, ra, dec, crit, bounds=None):
+    """Determine parameters for `proj_cls` that minimize `crit` over `ra, dec`.
+
+    Args:
+        proj_cls: projection class
+        x0: initial arguments for projection class `__init__`
+        ra: list of rectascensions
+        dec: list of declinations
+        crit: optimization criterion
+            needs to be function of semi-major and semi-minor axes of the Tissot indicatix
+        bounds: list of upper and lower bounds on each parameter in `x0`
+
+    Returns:
+        optimized projection of class `proj_cls`
+    """
+    print ("optimizing parameters of %s to minimize %s" % (proj_cls.__name__, crit.__name__))
     from scipy.optimize import fmin_l_bfgs_b
-    x, fmin, d = fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, reduce_fct), bounds=bounds, approx_grad=True)
+    x, fmin, d = fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, crit), bounds=bounds, approx_grad=True)
     print ("Best objective %.6f at %r" % (fmin, x))
     return proj_cls(*x)
 
@@ -85,11 +117,13 @@ class BaseProjection(object):
 
     @property
     def poleIsPoint(self):
+        """Whether the pole is mapped onto a point"""
         try:
             return self._poleIsPoint
         except AttributeError:
             self._poleIsPoint = {}
             N = 10
+            # run along the poles from the left to right outer meridian
             rnd_meridian = -180 + 360*np.random.rand(N) + self.ra_0
             for deg in [-90, 90]:
                 line = self.transform(rnd_meridian, deg*np.ones(N))
@@ -100,6 +134,7 @@ class BaseProjection(object):
             return self._poleIsPoint
 
     def _wrapRA(self, ra):
+        """Normalize rectascensions to -180 .. 180, with reference `ra_0` at 0"""
         ra_, isArray = _toArray(ra)
         ra_ = self.ra_0 - ra_ # inverse for RA
         # check that ra_ is between -180 and 180 deg
@@ -110,6 +145,7 @@ class BaseProjection(object):
         return ra_[0]
 
     def _unwrapRA(self, ra):
+        """Revert `_wrapRA`"""
         ra_, isArray = _toArray(ra)
         ra_ = self.ra_0 - ra_
         ra_ [ra_ < 0] += 360
@@ -119,6 +155,19 @@ class BaseProjection(object):
         return ra_[0]
 
     def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
+        """Compute the gradient in map coordinates at given sky position
+
+        Note: Gradient along parallel is computed in positive RA direction
+
+        Args:
+            ra: (list of) rectascension
+            dec: (list of) declination
+            sep: distance for symmetric first-order derivatives
+            direction: tangent direction for gradient, from `['parallel', 'meridian']`
+
+        Returns:
+            `dx`, `dy` for every item in `ra/dec`
+        """
         assert direction in ['parallel', 'meridian']
 
         ra_, isArray = _toArray(ra)
@@ -158,12 +207,31 @@ class BaseProjection(object):
         return x[:,0]
 
     def jacobian(self, ra, dec, sep=1e-2):
+        """Jacobian of mapping from ra/dec to map coordinates x/y
+
+        Args:
+            ra: (list of) rectascension
+            dec: (list of) declination
+
+        Returns:
+            ((dx/dRA, dx/dDec), (dy/dRA, dy/dDec)) for every item in `ra/dec`
+        """
         dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
         dxy_ddec = self.gradient(ra, dec, sep=sep, direction='meridian')
         return np.dstack((dxy_dra, dxy_ddec))
 
     def distortion(self, ra, dec):
-        # Snyder (1987, section 4)
+        """Compute semi-major and semi-minor axis according to Tissot's indicatrix
+
+        See Snyder (1987, section 4)
+
+        Args:
+            ra: (list of) rectascension
+            dec: (list of) declination
+
+        Returns:
+            a, b for every item in `ra/dec`
+        """
         jac = self.jacobian(ra,dec)
         cos_phi = np.cos(dec * DEG2RAD)
         h = np.sqrt(jac[:,0,1]**2 + jac[:,1,1]**2)
@@ -177,7 +245,18 @@ class BaseProjection(object):
         return a, b
 
     @classmethod
-    def optimize(cls, ra, dec, bounds=None, reduce_fct=meanDistortion):
+    def optimize(cls, ra, dec, crit=meanDistortion):
+        """Optimize the parameters of projection to minimize `crit` over `ra,dec`
+
+        Args:
+            ra: list of rectascensions
+            dec: list of declinations
+            crit: optimization criterion
+                needs to be function of semi-major and semi-minor axes of the Tissot indicatix
+
+        Returns:
+            optimized projection
+        """
         ra_ = np.array(ra)
         ra_[ra_ > 180] -= 360
         ra_[ra_ < -180] += 360
@@ -186,7 +265,7 @@ class BaseProjection(object):
             ra0 += 360
         x0 = np.array((ra0,))
         bounds = ((0, 360),)
-        return _optimize(cls, x0, ra, dec, reduce_fct, bounds=bounds)
+        return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
 
 
 # metaclass for registration.
@@ -208,6 +287,14 @@ class Projection(BaseProjection, metaclass=Meta):
 
 class ConicProjection(BaseProjection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
+        """Base class for conic projections
+
+        Args:
+            `ra_0`: RA that maps onto x = 0
+            `dec_0`: Dec that maps onto y = 0
+            `dec_1`: lower standard parallel
+            `dec_2`: upper standard parallel (must not be -dec_1)
+        """
         self.ra_0 = ra_0
         self.dec_0 = dec_0
         self.dec_1 = dec_1
@@ -216,7 +303,13 @@ class ConicProjection(BaseProjection):
             self.dec_1, self.dec_2 = self.dec_2, self.dec_1
 
     @classmethod
-    def optimize(cls, ra, dec, bounds=None, reduce_fct=meanDistortion):
+    def optimize(cls, ra, dec, crit=meanDistortion):
+        """Optimize the parameters of projection to minimize `crit` over `ra,dec`
+
+        Uses median Dec and declination-weighted RA as reference, and places
+        standard parallels 1/6 inwards from the min/max declination
+        to minimize scale variations (Snyder 1987, section 14).
+        """
         # for conics: need to determine central ra, dec plus two standard parallels
         # normalize ra
         ra_ = np.array(ra)
@@ -230,16 +323,13 @@ class ConicProjection(BaseProjection):
 
         # determine standard parallels
         dec1, dec2 = dec.min(), dec.max()
-
-        # move standard parallels 1/6 further in from the extremes
-        # to minimize scale variations (Snyder 1987, section 14)
         delta_dec = (dec0 - dec1, dec2 - dec0)
         dec1 += delta_dec[0]/6
         dec2 -= delta_dec[1]/6
 
         x0 = np.array((ra0, dec0, dec1, dec2))
         bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
-        return _optimize(cls, x0, ra, dec, reduce_fct, bounds=bounds)
+        return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
 
 
 class Albers(ConicProjection, Projection):
@@ -462,7 +552,7 @@ class Hammer(Projection):
     def __init__(self, ra_0):
         """Hammer projection
 
-        Hammer's 2:1 ellipse modification of The Lambert azimuthal equal-area
+        Hammer's 2:1 ellipse modification of the Lambert azimuthal equal-area
         projection.
 
         Its preferred use is for all-sky maps with an emphasis on low latitudes.
@@ -498,6 +588,14 @@ class Hammer(Projection):
 
 class Mollweide(Projection):
     def __init__(self, ra_0):
+        """Mollweide projection
+
+        Mollweide elliptical equal-area projection. It is used for all-sky maps,
+        but it introduces strong distortions at the outer meridians.
+        The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1987, section 31).
+        """
         self.ra_0 = ra_0
         self.sqrt2 = np.sqrt(2)
 
@@ -541,8 +639,19 @@ class Mollweide(Projection):
         return dz <= 0.5
 
 class HyperElliptical(Projection):
-
     def __init__(self, ra_0, alpha, k, gamma):
+        """Hyperelliptical projections.
+
+        The outline of the map follows the equation
+            |x/a|^k + |y/b|^k = gamma^k
+        The parameter alpha is a weight between cylindrical equal-area (alpha=0)
+        and sinosoidal projections.
+
+        The projection does not have a closed form for either forward or backward
+        transformation and this therefore computationally expensive.
+
+        See Snyder (1993, p. 220) for details.
+        """
         self.ra_0 = ra_0
         self.alpha = alpha
         self.k = k
@@ -639,7 +748,10 @@ class HyperElliptical(Projection):
 class Tobler(HyperElliptical):
     """Tobler hyperelliptical projection.
 
-    See Snyder (1993, p. 202) for details.
+    Tobler's cylindrical equal-area projection is a specialization of
+    `HyperElliptical` with parameters `alpha=0`, `k=2.5`, `gamma=1.183136`.
+
+    See Snyder (1993, p. 220) for details.
     """
     def __init__(self, ra_0):
         alpha, k, gamma = 0., 2.5, 1.183136
