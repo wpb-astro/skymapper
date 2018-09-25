@@ -614,13 +614,16 @@ class Mollweide(Projection):
 
     def theta(self, dec, eps=1e-6, maxiter=100):
         # Snyder 1987 p. 251
+        # Newon scheme to solve for theta given phi (=Dec)
         dec_ = dec * DEG2RAD
         t0 = dec_
         mask = np.abs(dec_) < np.pi/2
         if mask.any():
             t = t0[mask]
             for it in range(maxiter):
-                t_ = t - (2*t + np.sin(2*t) - np.pi*np.sin(dec_[mask]))/(2 + 2*np.cos(2*t))
+                f = 2*t + np.sin(2*t) - np.pi*np.sin(dec_[mask])
+                fprime = 2 + 2*np.cos(2*t)
+                t_ = t - f / fprime
                 if (np.abs(t - t_) < eps).all():
                     t = t_
                     break
@@ -637,6 +640,65 @@ class Mollweide(Projection):
     def contains(self, x, y):
         dz = x*x/16 + y*y/4
         return dz <= 0.5
+
+class EckertIV(Projection):
+    def __init__(self, ra_0):
+        """Eckert IV projection
+
+        Eckert's IV equal-area projection is used for all-sky maps.
+        The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1987, section 32).
+        """
+        self.ra_0 = ra_0
+        self.factor1 = 2 / np.sqrt(4*np.pi + np.pi**2)
+        self.factor2 = 2 * np.sqrt(1/(4/np.pi + 1))
+
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        t = self.theta(dec_)
+        x = self.factor1 * ra_ *DEG2RAD * (1 + np.cos(t))
+        y = self.factor2 * np.sin(t)
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
+
+    def invert(self, x, y):
+        t = np.arcsin(y / self.factor2)
+        ra = self._unwrapRA(x / (1+np.cos(t)) / self.factor1 / DEG2RAD)
+        dec = np.arcsin(y / self.factor2) / DEG2RAD
+        return ra, dec
+
+    def contains(self, x, y):
+        x_, isArray = _toArray(x)
+        y_, isArray = _toArray(y)
+        ylim = np.abs(y_) < self.factor2
+        t = np.arcsin(y_[ylim] / self.factor2)
+        xlim = np.abs(x_[ylim] / self.factor1 / (1+np.cos(t))) < np.pi
+        ylim[ylim] &= xlim
+        if isArray:
+            return ylim
+        else:
+            return ylim[0]
+
+    def theta(self, dec, eps=1e-6, maxiter=100):
+        # Snyder 1993 p. 195
+        # Newon scheme to solve for theta given phi (=Dec)
+        dec_ = dec * DEG2RAD
+        t = dec_
+        for it in range(maxiter):
+            f = t + np.sin(t)*np.cos(t) + 2*np.sin(t) - (2+np.pi/2)*np.sin(dec_)
+            fprime = 1 + np.cos(t)**2 - np.sin(t)**2 + 2*np.cos(t)
+            t_ = t - f / fprime
+            if (np.abs(t - t_) < eps).all():
+                t = t_
+                break
+            t = t_
+        return t
+
 
 class HyperElliptical(Projection):
     def __init__(self, ra_0, alpha, k, gamma):
