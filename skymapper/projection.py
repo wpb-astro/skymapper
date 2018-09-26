@@ -699,6 +699,44 @@ class EckertIV(Projection):
             t = t_
         return t
 
+class WagnerI(Projection):
+    def __init__(self, ra_0):
+        """Wagner I projection
+
+        Wagners's I equal-area projection is used for all-sky maps.
+        The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1993, p. 204).
+        """
+        self.ra_0 = ra_0
+        self.factor1 = 2 / 3**0.75
+        self.factor2 = 3**0.25
+        self.factor3 = np.sqrt(3)/2
+
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        t = np.arcsin(self.factor3*np.sin(dec_ * DEG2RAD))
+        x = self.factor1 * ra_ *DEG2RAD * np.cos(t)
+        y = self.factor2 * t
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
+
+    def invert(self, x, y):
+        t = y / self.factor2
+        ra = self._unwrapRA(x / np.cos(t) / self.factor1 / DEG2RAD)
+        dec = np.arcsin(np.sin(t) / self.factor3) / DEG2RAD
+        return ra, dec
+
+    def contains(self, x, y):
+        ylim = np.abs(y) < self.factor2 * np.arcsin(self.factor3)
+        t = y / self.factor2
+        xlim = np.abs(x) < np.pi * np.cos(t) * self.factor1
+        return xlim & ylim
+
 
 class HyperElliptical(Projection):
     def __init__(self, ra_0, alpha, k, gamma):
