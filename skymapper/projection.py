@@ -651,33 +651,33 @@ class EckertIV(Projection):
         For details, see Snyder (1987, section 32).
         """
         self.ra_0 = ra_0
-        self.factor1 = 2 / np.sqrt(4*np.pi + np.pi**2)
-        self.factor2 = 2 * np.sqrt(1/(4/np.pi + 1))
+        self.c1 = 2 / np.sqrt(4*np.pi + np.pi**2)
+        self.c2 = 2 * np.sqrt(1/(4/np.pi + 1))
 
     def transform(self, ra, dec):
         ra_, isArray = _toArray(ra)
         dec_, isArray = _toArray(dec)
         ra_ = self._wrapRA(ra_)
         t = self.theta(dec_)
-        x = self.factor1 * ra_ *DEG2RAD * (1 + np.cos(t))
-        y = self.factor2 * np.sin(t)
+        x = self.c1 * ra_ *DEG2RAD * (1 + np.cos(t))
+        y = self.c2 * np.sin(t)
         if isArray:
             return x, y
         else:
             return x[0], y[0]
 
     def invert(self, x, y):
-        t = np.arcsin(y / self.factor2)
-        ra = self._unwrapRA(x / (1+np.cos(t)) / self.factor1 / DEG2RAD)
-        dec = np.arcsin(y / self.factor2) / DEG2RAD
+        t = np.arcsin(y / self.c2)
+        ra = self._unwrapRA(x / (1+np.cos(t)) / self.c1 / DEG2RAD)
+        dec = np.arcsin(y / self.c2) / DEG2RAD
         return ra, dec
 
     def contains(self, x, y):
         x_, isArray = _toArray(x)
         y_, isArray = _toArray(y)
-        ylim = np.abs(y_) < self.factor2
-        t = np.arcsin(y_[ylim] / self.factor2)
-        xlim = np.abs(x_[ylim] / self.factor1 / (1+np.cos(t))) < np.pi
+        ylim = np.abs(y_) < self.c2
+        t = np.arcsin(y_[ylim] / self.c2)
+        xlim = np.abs(x_[ylim]) < np.pi * self.c1 * (1+np.cos(t))
         ylim[ylim] &= xlim
         if isArray:
             return ylim
@@ -709,33 +709,96 @@ class WagnerI(Projection):
         For details, see Snyder (1993, p. 204).
         """
         self.ra_0 = ra_0
-        self.factor1 = 2 / 3**0.75
-        self.factor2 = 3**0.25
-        self.factor3 = np.sqrt(3)/2
+        self.c1 = 2 / 3**0.75
+        self.c2 = 3**0.25
+        self.c3 = np.sqrt(3)/2
 
     def transform(self, ra, dec):
         ra_, isArray = _toArray(ra)
         dec_, isArray = _toArray(dec)
         ra_ = self._wrapRA(ra_)
-        t = np.arcsin(self.factor3*np.sin(dec_ * DEG2RAD))
-        x = self.factor1 * ra_ *DEG2RAD * np.cos(t)
-        y = self.factor2 * t
+        t = np.arcsin(self.c3*np.sin(dec_ * DEG2RAD))
+        x = self.c1 * ra_ *DEG2RAD * np.cos(t)
+        y = self.c2 * t
         if isArray:
             return x, y
         else:
             return x[0], y[0]
 
     def invert(self, x, y):
-        t = y / self.factor2
-        ra = self._unwrapRA(x / np.cos(t) / self.factor1 / DEG2RAD)
-        dec = np.arcsin(np.sin(t) / self.factor3) / DEG2RAD
+        t = y / self.c2
+        ra = self._unwrapRA(x / np.cos(t) / self.c1 / DEG2RAD)
+        dec = np.arcsin(np.sin(t) / self.c3) / DEG2RAD
         return ra, dec
 
     def contains(self, x, y):
-        ylim = np.abs(y) < self.factor2 * np.arcsin(self.factor3)
-        t = y / self.factor2
-        xlim = np.abs(x) < np.pi * np.cos(t) * self.factor1
+        ylim = np.abs(y) < self.c2 * np.arcsin(self.c3)
+        t = y / self.c2
+        xlim = np.abs(x) < np.pi * np.cos(t) * self.c1
         return xlim & ylim
+
+class WagnerIV(Projection):
+    def __init__(self, ra_0):
+        """Wagner IV projection
+
+        Wagner's IV equal-area projection is used for all-sky maps.
+        The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1993, p. 204).
+        """
+        self.ra_0 = ra_0
+        self.c1 = 0.86310
+        self.c2 = 1.56548
+        self.c3 = (4*np.pi + 3*np.sqrt(3)) / 6
+
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        t = self.theta(dec_)
+        x = self.c1 * ra_ * DEG2RAD * np.cos(t)
+        y = self.c2 * np.sin(t)
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
+
+    def invert(self, x, y):
+        t = np.arcsin(y / self.c2)
+        ra = self._unwrapRA(x / np.cos(t) / self.c1 / DEG2RAD)
+        dec = np.arcsin(y / self.c2) / DEG2RAD
+        return ra, dec
+
+    def contains(self, x, y):
+        x_, isArray = _toArray(x)
+        y_, isArray = _toArray(y)
+        ylim = np.abs(y_) < self.c2 * np.sqrt(3)/2 # = c2 * sin(pi/3)
+        t = np.arcsin(y_[ylim] / self.c2)
+        xlim = np.abs(x_[ylim]) < np.pi * self.c1 * np.cos(t)
+        ylim[ylim] &= xlim
+        if isArray:
+            return ylim
+        else:
+            return ylim[0]
+
+    def theta(self, dec, eps=1e-6, maxiter=100):
+        # Newon scheme to solve for theta given phi (=Dec)
+        dec_ = dec * DEG2RAD
+        t0 = np.zeros(dec_.shape)
+        mask = np.abs(dec_) < np.pi/2
+        if mask.any():
+            t = t0[mask]
+            for it in range(maxiter):
+                f = 2*t + np.sin(2*t) - self.c3*np.sin(dec_[mask])
+                fprime = 2 + 2*np.cos(2*t)
+                t_ = t - f / fprime
+                if (np.abs(t - t_) < eps).all():
+                    t = t_
+                    break
+                t = t_
+            t0[mask] = t
+        t0[~mask] = np.sign(dec[~mask]) * np.pi/3 # maximum value
+        return t0
 
 
 class HyperElliptical(Projection):
