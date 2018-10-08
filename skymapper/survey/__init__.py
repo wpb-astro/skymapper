@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from .. import register_survey
+from .. import register_survey, with_metaclass
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
@@ -19,7 +19,7 @@ class BaseSurvey(object):
     def getFootprint():
         pass
 
-class Survey(BaseSurvey, metaclass=Meta):
+class Survey(with_metaclass(Meta, BaseSurvey)):
     pass
 
 class DES(Survey):
