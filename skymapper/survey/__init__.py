@@ -23,10 +23,12 @@ class Survey(with_metaclass(Meta, BaseSurvey)):
     pass
 
 class DES(Survey):
+    @staticmethod
     def getConfigfile():
         this_dir, this_filename = os.path.split(__file__)
         return os.path.join(this_dir, "des.pkl")
 
+    @staticmethod
     def getFootprint():
         """Returns RA, Dec of the survey footprint."""
         this_dir, this_filename = os.path.split(__file__)
