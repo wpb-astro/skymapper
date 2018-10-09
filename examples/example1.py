@@ -55,7 +55,7 @@ if __name__ == "__main__":
     # define the best Albers projection for the footprint
     # minimizing the variation in distortion
     crit = skm.stdDistortion
-    proj = skm.Albers.optimize(ra, dec, reduce_fct=crit)
+    proj = skm.Albers.optimize(ra, dec, crit=crit)
 
     # construct map: will hold figure and projection
     # the outline of the sphere can be styled with kwargs for matplotlib Polygon
