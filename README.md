@@ -7,7 +7,7 @@
 
 The purpose of this package is to facilitate interactive work as well as the the creation of publication-quality plots with a python-based workflow many astronomers are accustomed to. The primary motivation is a truthful representation of samples and fields from the curved sky in planar figures, which becomes relevant when sizable portions of the sky are observed.
 
-What can it do? For instance, [creating a density map](examples/example1.py) from a catalog in a few lines:
+What can it do? For instance, find the optimal projection for a given list of RA/Dec coordinations and [creating a density map](examples/example1.py) from a catalog in a few lines:
 
 ```python
 import skymapper as skm
@@ -24,7 +24,7 @@ map = skm.Map(proj)
 # add graticules, separated by 15 deg
 # the lines can be styled with kwargs for matplotlib Line2D
 # additional arguments for formatting the graticule labels
-sep=15
+sep = 15
 map.grid(sep=sep)
 
 # make density plot
@@ -45,7 +45,7 @@ The syntax mimics `matplotlib` as closely as possible. Currently supported are c
 * `plot`
 * `scatter`
 * `hexbin`
-* `text` (with an optional `direction in ['parallel','meridian']` argument to align along a graticule)
+* `text` (with an optional `direction in ['parallel','meridian']` argument to align along either graticule)
 
 as well as special functions
 
