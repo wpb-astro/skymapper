@@ -800,7 +800,7 @@ class WagnerIV(Projection):
         t0[~mask] = np.sign(dec[~mask]) * np.pi/3 # maximum value
         return t0
 
-class McBrydeThomasFPQ(skm.Projection):
+class McBrydeThomasFPQ(Projection):
     def __init__(self, ra_0):
         """McBryde-Thomas Flat-Polar Quartic projection
 
