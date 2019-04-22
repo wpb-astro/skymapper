@@ -800,6 +800,65 @@ class WagnerIV(Projection):
         t0[~mask] = np.sign(dec[~mask]) * np.pi/3 # maximum value
         return t0
 
+class McBrydeThomasFPQ(skm.Projection):
+    def __init__(self, ra_0):
+        """McBryde-Thomas Flat-Polar Quartic projection
+
+        McBrydeThomasFPQ equal-area projection is used for all-sky maps.
+        The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1993, p. 211).
+        """
+        self.ra_0 = ra_0
+        self.c1 = 1 / np.sqrt(3*np.sqrt(2) + 6)
+        self.c2 = 2 * np.sqrt(3 / (2 + np.sqrt(2)))
+        self.c3 = 1 + np.sqrt(2) / 2
+
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        t = self.theta(dec_)
+        x = self.c1 * ra_ * DEG2RAD * (1 + 2*np.cos(t)/np.cos(t/2))
+        y = self.c2 * np.sin(t/2)
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
+
+    def invert(self, x, y):
+        t = 2*np.arcsin(y / self.c2)
+        ra = self._unwrapRA(x / (1 + 2*np.cos(t)/np.cos(t/2)) / self.c1 / DEG2RAD)
+        dec = np.arcsin((np.sin(t/2) + np.sin(t))/ self.c3) / DEG2RAD
+        return ra, dec
+
+    def contains(self, x, y):
+        x_, isArray = _toArray(x)
+        y_, isArray = _toArray(y)
+        # limit of y at phi = 90, with explicit value of c2 used
+        ylim = np.abs(y_) < 2*np.sqrt(3) / np.sqrt(2+np.sqrt(2)) * np.sin((np.pi/2)/2)
+        t = 2*np.arcsin(y_[ylim] / self.c2)
+        xlim = np.abs(x_[ylim]) < np.pi * self.c1 * (1 + 2*np.cos(t)/np.cos(t/2))
+        ylim[ylim] &= xlim
+        if isArray:
+            return ylim
+        else:
+            return ylim[0]
+
+    def theta(self, dec, eps=1e-6, maxiter=100):
+        # Newon scheme to solve for theta given phi (=Dec)
+        dec_ = dec * DEG2RAD
+        t = dec_
+        for it in range(maxiter):
+            f = np.sin(t/2) + np.sin(t) - self.c3*np.sin(dec_)
+            fprime = np.cos(t/2)/2 + np.cos(t)
+            t_ = t - f / fprime
+            if (np.abs(t - t_) < eps).all():
+                t = t_
+                break
+            t = t_
+        return t
+
 
 class HyperElliptical(Projection):
     def __init__(self, ra_0, alpha, k, gamma):
