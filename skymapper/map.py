@@ -309,13 +309,21 @@ class Map():
         xy = np.dstack((x,y)).reshape(-1,2)
         return self._edge.get_path().contains_points(xy).reshape(x.shape)
 
-    def xlim(self):
-        """Get the map limits in x-direction"""
-        return (self._edge.xy[:, 0].min(), self._edge.xy[:, 0].max())
+    def xlim(self, left=None, right=None, **kw):
+        """Get/set the map limits in x-direction"""
+        if left is None and right is None:
+            return (self._edge.xy[:, 0].min(), self._edge.xy[:, 0].max())
+        else:
+            self.ax.set_xlim(left=left, right=right, **kw)
+            self._resetFrame()
 
-    def ylim(self):
-        """Get the map limits in x-direction"""
-        return (self._edge.xy[:, 1].min(), self._edge.xy[:, 1].max())
+    def ylim(self, bottom=None, top=None, **kw):
+        """Get/set the map limits in x-direction"""
+        if bottom is None and top is None:
+            return (self._edge.xy[:, 1].min(), self._edge.xy[:, 1].max())
+        else:
+            self.ax.set_ylim(bottom=bottom, top=top, **kw)
+            self._resetFrame()
 
     def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         """Set map grid / graticules
