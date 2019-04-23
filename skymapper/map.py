@@ -6,6 +6,7 @@ from . import healpix
 from . import survey_register
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
+from matplotlib.path import Path
 
 DEG2RAD = np.pi/180
 
@@ -303,6 +304,10 @@ class Map():
             edgecolor = 'None'
             poly = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor_, zorder=zorder, gid="edge-background")
             self.ax.add_patch(poly)
+
+    def contains(self, x, y):
+        xy = np.dstack((x,y)).reshape(-1,2)
+        return self._edge.get_path().contains_points(xy).reshape(x.shape)
 
     def xlim(self):
         """Get the map limits in x-direction"""
@@ -614,7 +619,7 @@ class Map():
                     # intersect with axis
                     xm, ym = c.get_xdata(), c.get_ydata()
                     xm_at_ylim = extrap(ylim, ym, xm)[pos]
-                    if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.proj.contains(xm_at_ylim, ylim[pos]):
+                    if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.contains(xm_at_ylim, ylim[pos]):
                         m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
                         dxy = self.proj.gradient(m_, p_, direction="meridian")
                         dxy /= np.sqrt((dxy**2).sum())
@@ -709,7 +714,7 @@ class Map():
                     # intersect with axis
                     xp, yp = c.get_xdata(), c.get_ydata()
                     yp_at_xlim = extrap(xlim, xp, yp)[pos]
-                    if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.proj.contains(xlim[pos], yp_at_xlim):
+                    if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.contains(xlim[pos], yp_at_xlim):
                         m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
                         dxy = self.proj.gradient(m_, p_, direction='parallel')
                         dxy /= np.sqrt((dxy**2).sum())
@@ -771,7 +776,7 @@ class Map():
                 line = np.linspace(xlim[0], xlim[1], precision), ylim[1]*const
 
             # show axis lines only where line is inside of map edge
-            inside = self.proj.contains(*line)
+            inside = self.contains(*line)
             if (~inside).all():
                 continue
 
@@ -1162,7 +1167,7 @@ class Map():
         xline = np.arange(xlim[0], xlim[1], dx)
         yline = np.arange(ylim[0], ylim[1], dx)
         xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
-        inside = self.proj.contains(xp,yp)
+        inside = self.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
 
         rap, decp = self.proj.invert(xp[inside], yp[inside])

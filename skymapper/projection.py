@@ -75,10 +75,12 @@ class BaseProjection(object):
     Every projection needs to implement three methods:
     * `transform(self, ra, dec)`: mapping from ra/dec to map x/y
     * `invert(self, x, y)`: the inverse mapping from x/y to ra/dec
-    * `contains(self, x, y)`: whether x/y is inside of map region
 
-    All three methods accept either single number or arrays and return accordingly.
+    All methods accept either single number or arrays and return accordingly.
     """
+    def __call__(self, ra, dec):
+        return self.transform(ra, dec)
+
     def transform(self, ra, dec):
         """Convert RA/Dec into map coordinates
 
@@ -100,18 +102,6 @@ class BaseProjection(object):
 
         Returns:
             RA,Dec with the same format as x/y
-        """
-        pass
-
-    def contains(self, x, y):
-        """Test if x/y is a valid set of map coordinates
-
-        Args:
-            x:  float or array of floats
-            y: float or array of floats
-
-        Returns:
-            Bool array with the same format as x/y
         """
         pass
 
@@ -373,16 +363,6 @@ class Albers(ConicProjection, Projection):
         rho = self._rho(dec)
         return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
-    def contains(self, x, y):
-        rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
-        inside = np.abs((self.C - (rho * self.n)**2)/(2*self.n)) <= 1
-        if self.n >= 0:
-            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
-        else:
-            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        wedge = np.abs(theta) < np.abs(self.n*180)
-        return inside & wedge
-
     def invert(self, x, y):
         # ra/dec actually x/y
         # Snyder 1987, eq 14-8 to 14-11
@@ -456,16 +436,6 @@ class LambertConformal(ConicProjection, Projection):
         rho = self._rho(dec)
         return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
-    def contains(self, x, y):
-        rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
-        inside = np.abs(rho) < max(np.abs(self._rho(self.dec_max)), np.abs(self._rho(-self.dec_max)))
-        if self.n >= 0:
-            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
-        else:
-            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        wedge = np.abs(theta) < np.abs(self.n*180)
-        return inside & wedge
-
     def invert(self, x, y):
         rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
         if self.n >= 0:
@@ -519,20 +489,6 @@ class Equidistant(ConicProjection, Projection):
         rho = self._rho(dec)
         return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
-    def contains(self, x, y):
-        rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
-        rho_min = np.abs(self._rho(90))
-        rho_max = np.abs(self._rho(-90))
-        if rho_min > rho_max:
-            rho_min, rho_max = rho_max, rho_min
-        inside = (np.abs(rho) < rho_max) & (np.abs(rho) > rho_min)
-        if self.n >= 0:
-            theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
-        else:
-            theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        wedge = np.abs(theta) < np.abs(self.n*180)
-        return inside & wedge
-
     def invert(self, x, y):
         # Snyder 1987, eq 14-10 to 14-11
         rho = np.sqrt(x**2 + (self.rho_0 - y)**2) * np.sign(self.n)
@@ -577,10 +533,6 @@ class Hammer(Projection):
         ra = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
         ra = self._unwrapRA(ra)
         return ra, dec
-
-    def contains(self, x, y):
-        dz = x*x/16 + y*y/4
-        return dz <= 0.5
 
     def __repr__(self):
         return "Hammer(%r)" % self.ra_0
@@ -637,9 +589,6 @@ class Mollweide(Projection):
         dec = np.arcsin((2*theta_ + np.sin(2*theta_))/np.pi) / DEG2RAD
         return ra, dec
 
-    def contains(self, x, y):
-        dz = x*x/16 + y*y/4
-        return dz <= 0.5
 
 class EckertIV(Projection):
     def __init__(self, ra_0):
@@ -671,18 +620,6 @@ class EckertIV(Projection):
         ra = self._unwrapRA(x / (1+np.cos(t)) / self.c1 / DEG2RAD)
         dec = np.arcsin(y / self.c2) / DEG2RAD
         return ra, dec
-
-    def contains(self, x, y):
-        x_, isArray = _toArray(x)
-        y_, isArray = _toArray(y)
-        ylim = np.abs(y_) < self.c2
-        t = np.arcsin(y_[ylim] / self.c2)
-        xlim = np.abs(x_[ylim]) < np.pi * self.c1 * (1+np.cos(t))
-        ylim[ylim] &= xlim
-        if isArray:
-            return ylim
-        else:
-            return ylim[0]
 
     def theta(self, dec, eps=1e-6, maxiter=100):
         # Snyder 1993 p. 195
@@ -731,11 +668,6 @@ class WagnerI(Projection):
         dec = np.arcsin(np.sin(t) / self.c3) / DEG2RAD
         return ra, dec
 
-    def contains(self, x, y):
-        ylim = np.abs(y) < self.c2 * np.arcsin(self.c3)
-        t = y / self.c2
-        xlim = np.abs(x) < np.pi * np.cos(t) * self.c1
-        return xlim & ylim
 
 class WagnerIV(Projection):
     def __init__(self, ra_0):
@@ -768,18 +700,6 @@ class WagnerIV(Projection):
         ra = self._unwrapRA(x / np.cos(t) / self.c1 / DEG2RAD)
         dec = np.arcsin(y / self.c2) / DEG2RAD
         return ra, dec
-
-    def contains(self, x, y):
-        x_, isArray = _toArray(x)
-        y_, isArray = _toArray(y)
-        ylim = np.abs(y_) < self.c2 * np.sqrt(3)/2 # = c2 * sin(pi/3)
-        t = np.arcsin(y_[ylim] / self.c2)
-        xlim = np.abs(x_[ylim]) < np.pi * self.c1 * np.cos(t)
-        ylim[ylim] &= xlim
-        if isArray:
-            return ylim
-        else:
-            return ylim[0]
 
     def theta(self, dec, eps=1e-6, maxiter=100):
         # Newon scheme to solve for theta given phi (=Dec)
@@ -831,19 +751,6 @@ class McBrydeThomasFPQ(Projection):
         ra = self._unwrapRA(x / (1 + 2*np.cos(t)/np.cos(t/2)) / self.c1 / DEG2RAD)
         dec = np.arcsin((np.sin(t/2) + np.sin(t))/ self.c3) / DEG2RAD
         return ra, dec
-
-    def contains(self, x, y):
-        x_, isArray = _toArray(x)
-        y_, isArray = _toArray(y)
-        # limit of y at phi = 90, with explicit value of c2 used
-        ylim = np.abs(y_) < 2*np.sqrt(3) / np.sqrt(2+np.sqrt(2)) * np.sin((np.pi/2)/2)
-        t = 2*np.arcsin(y_[ylim] / self.c2)
-        xlim = np.abs(x_[ylim]) < np.pi * self.c1 * (1 + 2*np.cos(t)/np.cos(t/2))
-        ylim[ylim] &= xlim
-        if isArray:
-            return ylim
-        else:
-            return ylim[0]
 
     def theta(self, dec, eps=1e-6, maxiter=100):
         # Newon scheme to solve for theta given phi (=Dec)
@@ -905,9 +812,6 @@ class HyperElliptical(Projection):
             return  ra, dec
         else:
             return  ra[0], dec[0]
-
-    def contains(self, x, y):
-        return np.abs(x / np.sqrt(2*np.pi/self.gamma))**self.k + np.abs(y * self.affine)**self.k < self.gamma_pow_k
 
     def elliptic(self, y):
         """Returns (gamma^k - y^k)^1/k
