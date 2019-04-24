@@ -383,6 +383,7 @@ class Map():
                 for args in args_list.values():
                     getattr(self, method)(**args)
             else:
+                # label meridians: at the poles if they are not points
                 if method == 'labelMeridianAtParallel':
                     degs = [-90, 90]
                     done = False
@@ -390,9 +391,13 @@ class Map():
                         if not self.proj.poleIsPoint[deg]:
                             getattr(self, method)(deg)
                             done = True
+                    # otherwise: at the equator
                     if not done:
                         deg  = 0
-                        getattr(self, method)(deg, meridians=_meridians[1:-1])
+                        # remove outer meridians to prevent overlap with parallel label
+                        if self.proj.ra_0 % sep == 0:
+                            _meridians = _meridians[1:-1]
+                        getattr(self, method)(deg, meridians=_meridians)
                 else:
                     degs = [self.proj.ra_0 + 180, self.proj.ra_0 - 180]
                     for deg in degs:
