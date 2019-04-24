@@ -63,10 +63,12 @@ def _optimize(proj_cls, x0, ra, dec, crit, bounds=None):
         optimized projection of class `proj_cls`
     """
     print ("optimizing parameters of %s to minimize %s" % (proj_cls.__name__, crit.__name__))
-    from scipy.optimize import fmin_l_bfgs_b
-    x, fmin, d = fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, crit), bounds=bounds, approx_grad=True)
+    x, fmin, d = scipy.optimize.fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, crit), bounds=bounds, approx_grad=True)
     print ("Best objective %.6f at %r" % (fmin, x))
     return proj_cls(*x)
+
+def _dist(radec, proj, xy):
+    return np.sum((xy - np.array(proj(radec[0], radec[1])))**2)
 
 
 class BaseProjection(object):
@@ -103,7 +105,34 @@ class BaseProjection(object):
         Returns:
             RA,Dec with the same format as x/y
         """
-        pass
+        # default implementation for non-analytic inverses
+        if not hasattr(x, '__iter__'):
+            x_ = (x,)
+        else:
+            x_ = x
+        if not hasattr(y, '__iter__'):
+            y_ = (y,)
+        else:
+            y_ = y
+        assert len(x_) == len(y_)
+
+        bounds = ((-180, 180), (-90, 90)) # ra/dec limits
+        start = (self.ra_0,0) # ra/dec of initial guess: should be close to map center
+        ra, dec = np.empty(len(x_)), np.empty(len(y_))
+        i = 0
+        for x__,y__ in zip(x_, y_):
+            xy = np.array([x__,y__])
+            radec, fmin, d = scipy.optimize.fmin_l_bfgs_b(_dist, start, args=(self, xy), bounds=bounds, approx_grad=True)
+            if fmin < 1e-6: # smaller than default tolerance of fmin
+                ra[i], dec[i] = radec
+            else:
+                ra[i], dec[i] = -1000, -1000
+            i += 1
+
+        ra_ = self._wrapRA(ra)
+        if not hasattr(x, '__iter__'):
+            return ra[0], dec[0]
+        return ra, dec
 
     @property
     def poleIsPoint(self):
