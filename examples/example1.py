@@ -103,10 +103,6 @@ if __name__ == "__main__":
     sep=45
     map3.grid(sep=sep)
 
-    # alter position of default labels at the outer meridians
-    for m in [proj.ra_0 + 180, proj.ra_0 - 180]:
-        map3.labelParallelAtMeridian(m, verticalalignment='top', horizontalalignment='center')
-
     # alter number of labels at the south pole
     map3.labelMeridianAtParallel(-90, size=8, meridians=np.arange(0,360,90))
 
