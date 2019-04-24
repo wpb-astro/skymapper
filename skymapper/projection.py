@@ -749,6 +749,35 @@ class WagnerIV(Projection):
         t0[~mask] = np.sign(dec[~mask]) * np.pi/3 # maximum value
         return t0
 
+
+class WagnerVII(Projection):
+    def __init__(self, ra_0):
+        """Wagner VII projection
+
+        WagnerVII equal-area projection is used for all-sky maps.
+        The only free parameter is the reference RA `ra_0`.
+
+        For details, see Snyder (1993, p. 237).
+        """
+        self.ra_0 = ra_0
+        self.c1 = 2.66723
+        self.c2 = 1.24104
+        self.c3 = np.sin(65 * DEG2RAD)
+
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+        theta = np.arcsin(self.c3 * np.sin(dec_ * DEG2RAD))
+        alpha = np.arccos(np.cos(theta)*np.cos(ra_ * DEG2RAD/3))
+        x = self.c1 * np.cos(theta) * np.sin(ra_ * DEG2RAD / 3) / np.cos(alpha/2)
+        y = self.c2 * np.sin(theta) / np.cos(alpha/2)
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
+
+
 class McBrydeThomasFPQ(Projection):
     def __init__(self, ra_0):
         """McBryde-Thomas Flat-Polar Quartic projection
