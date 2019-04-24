@@ -385,19 +385,16 @@ class Map():
             else:
                 # label meridians: at the poles if they are not points
                 if method == 'labelMeridianAtParallel':
-                    degs = [-90, 90]
-                    done = False
-                    for deg in degs:
-                        if not self.proj.poleIsPoint[deg]:
-                            getattr(self, method)(deg)
-                            done = True
-                    # otherwise: at the equator
-                    if not done:
-                        deg  = 0
-                        # remove outer meridians to prevent overlap with parallel label
-                        if self.proj.ra_0 % sep == 0:
-                            _meridians = _meridians[1:-1]
-                        getattr(self, method)(deg, meridians=_meridians)
+                    # determine the parallel that has the most space for labels
+                    dec = [-90, 0, 90]
+                    ra = [self.proj.ra_0,] * 3
+                    jac = np.sum(self.proj.gradient(ra, dec)**2, axis=1)
+                    p = dec[np.argmax(jac)]
+                    # remove outer meridians to prevent overlap with parallel label
+                    if p == 0 and self.proj.ra_0 % sep == 0:
+                        _meridians = _meridians[1:-1]
+                    getattr(self, method)(p, meridians=_meridians)
+                # label both outer meridians
                 else:
                     degs = [self.proj.ra_0 + 180, self.proj.ra_0 - 180]
                     for deg in degs:

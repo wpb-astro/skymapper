@@ -67,13 +67,6 @@ if __name__ == "__main__":
     sep=15
     map.grid(sep=sep)
 
-    # alter position of default labels at the outer meridians
-    for m in [proj.ra_0 + 180, proj.ra_0 - 180]:
-        map.labelParallelAtMeridian(m, verticalalignment='top', horizontalalignment='center')
-
-    # remove labels at the south pole
-    map.labelMeridianAtParallel(-90, meridians=[])
-
     # add footprint, retain the polygon for clipping
     footprint = map.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
 
