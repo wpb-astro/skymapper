@@ -567,7 +567,7 @@ class Map():
 
             self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
-    def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, description='RA', **kwargs):
+    def labelMeridiansAtFrame(self, loc='top', meridians=None, pad=None, description=None, **kwargs):
         """Label the meridians on rectangular frame of the map
 
         If the view only shows a fraction of the map, a segment or an entire
