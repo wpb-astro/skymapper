@@ -1012,25 +1012,6 @@ class Map():
         self.fig.savefig(*args, **kwargs)
 
     #### special plot types for maps ####
-    def footprint(self, surveyname, **kwargs):
-        """Plot survey footprint polygon onto map
-
-        Uses `get_footprint()` method of a `skymapper.Survey` derived class instance
-        The name of the survey is indentical to the class name.
-
-        All available surveys are listed in `skymapper.survey_register`.
-
-        Args:
-            surveyname: name of the survey, must be in keys of `skymapper.survey_register`
-            **kwargs: styling of `matplotlib.collections.PolyCollection`
-        """
-        # search for survey in register
-        ra, dec = survey_register[surveyname].getFootprint()
-
-        x,y  = self.proj.transform(ra, dec)
-        poly = Polygon(np.dstack((x,y))[0], closed=True, **kwargs)
-        self.ax.add_patch(poly)
-        return poly
 
     def vertex(self, vertices, color=None, vmin=None, vmax=None, **kwargs):
         """Plot polygons (e.g. Healpix vertices)
@@ -1049,12 +1030,37 @@ class Map():
 
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        clip_path = kwargs.pop('clip_path', self._edge)
-        coll = PolyCollection(vertices_, array=color, zorder=zorder, clip_path=clip_path, **kwargs)
-        coll.set_clim(vmin=vmin, vmax=vmax)
+        rasterized = kwargs.pop("rasterized", True)
+        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, **kwargs)
+        if color is not None:
+            coll.set_array(color)
+            coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
         self.ax.add_collection(coll)
         return coll
+
+    def footprint(self, survey, nside, weight=False, **kwargs):
+        """Plot survey footprint onto map
+
+        Uses `contains()` method of a `skymapper.Survey` derived class instance
+
+        Args:
+            survey: name of the survey, must be in keys of `skymapper.survey_register`
+            nside: HealPix nside
+            **kwargs: styling of `matplotlib.collections.PolyCollection`
+        """
+
+        rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
+        if weight:
+            weight = survey.weight(rap, decp)
+            inside = weight > 0
+            weight = weight[inside]
+        else:
+            inside = survey.contains(rap, decp)
+            weight = None
+
+        # since this is normally an all sky map, clip at the map edge
+        return self.vertex(vertices[inside], color=weight, **kwargs)
 
     def healpix(self, m, nest=False, color_percentiles=[10,90], **kwargs):
         """Plot HealPix map
@@ -1113,7 +1119,7 @@ class Map():
         # make a map of the vertices
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, **kwargs)
 
-    def interpolate(self, ra, dec, value, method='cubic', fill_value=np.nan, **kwargs):
+    def interpolate(self, ra, dec, value, nside, **kwargs):
         """Interpolate ra,dec samples over covered region in the map
 
         Requires scipy, uses `scipy.interpolate.griddata` with `method='cubic'`.
@@ -1122,32 +1128,13 @@ class Map():
             ra: list of rectascensions
             dec: list of declinations
             value: list of sample values
+            nside: Healpix nside for spatial resolution
             **kwargs: arguments for matplotlib.imshow
         """
-        x, y = self.proj.transform(ra, dec)
+        vp, rap, decp, vertices = healpix.reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=nside, return_vertices=True)
+        return self.vertex(vertices, color=vp, **kwargs)
 
-        # evaluate interpolator over the range covered by data
-        xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
-        per_sample_volume = min(xlim[1]-xlim[0], ylim[1]-ylim[0])**2 / x.size
-        dx = np.sqrt(per_sample_volume)
-        xline = np.arange(xlim[0], xlim[1], dx)
-        yline = np.arange(ylim[0], ylim[1], dx)
-        xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
-
-        vp = scipy.interpolate.griddata(np.dstack((x,y))[0], value, (xp,yp), method=method, fill_value=fill_value)
-        # remember axes limits ...
-        xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
-        _ = kwargs.pop('extend', None)
-        zorder = kwargs.pop("zorder", 0) # default for imshow: underneath everything
-        clip_path = kwargs.pop('clip_path', self._edge)
-        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
-        artist.set_clip_path(clip_path)
-        # ... because imshow focusses on extent
-        self.ax.set_xlim(xlim_)
-        self.ax.set_ylim(ylim_)
-        return artist
-
-    def extrapolate(self, ra, dec, value, resolution=100, clean_edge=True, **kwargs):
+    def extrapolate(self, ra, dec, value, nside, **kwargs):
         """Extrapolate ra,dec samples on the entire sphere and project on the map
 
         Requires scipy, uses default `scipy.interpolate.Rbf`.
@@ -1156,45 +1143,17 @@ class Map():
             ra: list of rectascensions
             dec: list of declinations
             value: list of sample values
-            resolution: number of evaluated cells per linear map dimension
+            nside: Healpix nside for spatial resolution
             clean_edge: use another interpolation to generate clean edge of the map
             **kwargs: arguments for matplotlib.imshow
         """
         # interpolate samples in RA/DEC
         rbfi = scipy.interpolate.Rbf(ra, dec, value, norm=skyDistance)
 
-        # make grid in x/y over the limits of the map or the clip_path
+        # make grid in ra/dec
+        rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
+        vp = rbfi(rap, decp)
+
+        # since this is normally an all sky map, clip at the map edge
         clip_path = kwargs.pop('clip_path', self._edge)
-        if clip_path is None:
-            xlim, ylim = self.xlim(), self.ylim()
-        else:
-            xlim = clip_path.xy[:, 0].min(), clip_path.xy[:, 0].max()
-            ylim = clip_path.xy[:, 1].min(), clip_path.xy[:, 1].max()
-
-        if resolution % 1 == 0:
-            resolution += 1
-
-        dx = (xlim[1]-xlim[0])/resolution
-        xline = np.arange(xlim[0], xlim[1], dx)
-        yline = np.arange(ylim[0], ylim[1], dx)
-        xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
-        inside = self.contains(xp,yp)
-        vp = np.ma.array(np.empty(xp.shape), mask=~inside)
-
-        rap, decp = self.proj.invert(xp[inside], yp[inside])
-        vp[inside] = rbfi(rap, decp)
-
-        # construct another rbf in pixel space to populate the values
-        # outside of the map region, ordinary Euclidean distance now
-        if clean_edge:
-            rbfi = scipy.interpolate.Rbf(xp[inside], yp[inside], vp[inside])
-            vp[~inside] = rbfi(xp[~inside], yp[~inside])
-
-        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
-        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
-        artist.set_clip_path(clip_path)
-        # ... because imshow focusses on extent
-        self.ax.set_xlim(xlim_)
-        self.ax.set_ylim(ylim_)
-        return artist
+        return self.vertex(vertices, color=vp, clip_path=clip_path, **kwargs)

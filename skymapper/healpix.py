@@ -33,6 +33,16 @@ try:
             vertices[i,:,1] = 90.0 - corners[0]
         return vertices
 
+    def getGrid(nside, nest=False, return_vertices=False):
+        pixels = np.arange(hp.nside2npix(nside))
+        theta, phi = hp.pix2ang(nside, pixels, nest=nest)
+        ra = phi*180/np.pi
+        dec = 90 - theta*180/np.pi
+        if return_vertices:
+            vertices = getHealpixVertices(pixels, nside, nest=nest)
+            return ra, dec, vertices
+        return ra, dec
+
     def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False):
         """Get number density of objects from RA/Dec in HealPix cells.
 
@@ -72,8 +82,7 @@ try:
         if return_vertices:
             vertices = getHealpixVertices(pixels, nside)
             return bc, ra_, dec_, vertices
-        else:
-            return bc, ra_, dec_
+        return bc, ra_, dec_
 
     def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vertices=False):
         """Reduce values at given RA/Dec in HealPix cells to a scalar.
@@ -117,8 +126,7 @@ try:
         if return_vertices:
             vertices = getHealpixVertices(pixels, nside)
             return v, ra_, dec_, vertices
-        else:
-            return v, ra_, dec_
+        return v, ra_, dec_
 
 except ImportError:
     print("Warning: healpix functions not available.")
