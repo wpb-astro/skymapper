@@ -1147,7 +1147,7 @@ class Map():
         self.ax.set_ylim(ylim_)
         return artist
 
-    def extrapolate(self, ra, dec, value, resolution=100, **kwargs):
+    def extrapolate(self, ra, dec, value, resolution=100, clean_edge=True, **kwargs):
         """Extrapolate ra,dec samples on the entire sphere and project on the map
 
         Requires scipy, uses default `scipy.interpolate.Rbf`.
@@ -1157,6 +1157,7 @@ class Map():
             dec: list of declinations
             value: list of sample values
             resolution: number of evaluated cells per linear map dimension
+            clean_edge: use another interpolation to generate clean edge of the map
             **kwargs: arguments for matplotlib.imshow
         """
         # interpolate samples in RA/DEC
@@ -1182,6 +1183,13 @@ class Map():
 
         rap, decp = self.proj.invert(xp[inside], yp[inside])
         vp[inside] = rbfi(rap, decp)
+
+        # construct another rbf in pixel space to populate the values
+        # outside of the map region, ordinary Euclidean distance now
+        if clean_edge:
+            rbfi = scipy.interpolate.Rbf(xp[inside], yp[inside], vp[inside])
+            vp[~inside] = rbfi(xp[~inside], yp[~inside])
+
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
         artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
