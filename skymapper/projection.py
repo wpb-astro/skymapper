@@ -288,7 +288,12 @@ class BaseProjection(object):
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
-from . import register_projection, projection_register, with_metaclass
+
+from . import register_projection, with_metaclass
+# [blatant copy from six to avoid dependency]
+# python 2 and 3 compatible metaclasses
+# see http://python-future.org/compatible_idioms.html#metaclasses
+
 class Meta(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)

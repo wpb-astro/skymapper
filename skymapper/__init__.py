@@ -10,6 +10,17 @@ def register_survey(cls):
 # [blatant copy from six to avoid dependency]
 # python 2 and 3 compatible metaclasses
 # see http://python-future.org/compatible_idioms.html#metaclasses
+
+class Meta(type):
+    def __new__(meta, name, bases, class_dict):
+        cls = type.__new__(meta, name, bases, class_dict)
+
+        # remove those that are directly derived from BaseProjection
+        if BaseProjection not in bases:
+            register_projection(cls)
+
+        return cls
+
 def with_metaclass(meta, *bases):
     """Create a base class with a metaclass."""
     # This requires a bit of explanation: the basic idea is to make a dummy
@@ -25,10 +36,6 @@ def with_metaclass(meta, *bases):
             return meta.__prepare__(name, bases)
     return type.__new__(metaclass, 'temporary_class', (), {})
 
-from . import survey
 from .map import *
 from .projection import *
-
-def loadMap(surveyname, ax=None):
-    survey = survey_register[surveyname]
-    return Map.load(survey.getConfigfile(), ax=ax)
+from . import survey
