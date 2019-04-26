@@ -958,7 +958,7 @@ class Map():
 
         return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", clip_on=True, **kwargs)
 
-    def colorbar(self, cb_collection, cb_label="", orientation="vertical", size="2%", pad="1%"):
+    def colorbar(self, cb_collection, cb_label="", loc="right", size="2%", pad="1%"):
         """Add colorbar to side of map.
 
         The location of the colorbar will be chosen automatically to not interfere
@@ -971,14 +971,19 @@ class Map():
             size: fraction of ax size to use for colorbar
             pad: fraction of ax size to use as pad to map frame
         """
-        assert orientation in ["vertical", "horizontal"]
+        assert loc in ["top", "bottom", "left", "right"]
 
-        # pick the side that does not have the tick labels
-        if orientation == "vertical":
-            frame_loc = self._config['labelParallelsAtFrame'].get('current_loc', 'left')
-        else:
-            frame_loc = self._config['labelMeridiansAtFrame'].get('current_loc', 'bottom')
-        loc = self._negateLoc(frame_loc)
+        # move frame ticks to other side: colorbar side is taken
+        if loc in["top", "bottom"]:
+            orientation = "horizontal"
+            params = self._config['labelMeridiansAtFrame']
+            params['loc'] = self._negateLoc(loc)
+            self.labelMeridiansAtFrame(**params)
+        if loc in["left", "right"]:
+            orientation = "vertical"
+            params = self._config['labelParallelsAtFrame']
+            params['loc'] = self._negateLoc(loc)
+            self.labelParallelsAtFrame(**params)
 
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(self.ax)
