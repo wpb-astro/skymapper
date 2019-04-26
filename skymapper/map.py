@@ -213,16 +213,16 @@ class Map():
         map.ax.set_ylim(ylim)
         map._setFrame()
 
-        meridian_args = config.pop('labelMeridianAtParallel', {})
-        parallel_args = config.pop('labelParallelAtMeridian', {})
+        meridian_args = config.pop('labelMeridiansAtParallel', {})
+        parallel_args = config.pop('labelParallelsAtMeridian', {})
         for method in config.keys():
             getattr(map, method)(**config[method])
 
         for args in meridian_args.values():
-            map.labelMeridianAtParallel(**args)
+            map.labelMeridiansAtParallel(**args)
 
         for args in parallel_args.values():
-            map.labelParallelAtMeridian(**args)
+            map.labelParallelsAtMeridian(**args)
 
         map.fig.tight_layout(pad=0.75)
         return map
@@ -379,14 +379,14 @@ class Map():
                 getattr(self, method)()
 
         # (re)generate edge labels
-        for method in ['labelMeridianAtParallel', 'labelParallelAtMeridian']:
+        for method in ['labelMeridiansAtParallel', 'labelParallelsAtMeridian']:
             if method in self._config.keys():
                 args_list = self._config.pop(method, [])
                 for args in args_list.values():
                     getattr(self, method)(**args)
             else:
                 # label meridians: at the poles if they are not points
-                if method == 'labelMeridianAtParallel':
+                if method == 'labelMeridiansAtParallel':
                     # determine the parallel that has the most space for labels
                     dec = [-90, 0, 90]
                     ra = [self.proj.ra_0,] * 3
@@ -409,7 +409,7 @@ class Map():
         if loc == "right":
             return "left"
 
-    def labelMeridianAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+    def labelMeridiansAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
         """Label the meridians intersecting a given parallel
 
         The method is called by `grid()` but can be used to overwrite the defaults.
@@ -427,7 +427,7 @@ class Map():
         if p in self.proj.poleIsPoint.keys() and self.proj.poleIsPoint[p]:
             return
 
-        myname = 'labelMeridianAtParallel'
+        myname = 'labelMeridiansAtParallel'
         if myname not in self._config.keys():
             self._config[myname] = dict()
 
@@ -488,7 +488,7 @@ class Map():
 
             self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
-    def labelParallelAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+    def labelParallelsAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
         """Label the parallel intersecting a given meridian
 
         The method is called by `grid()` but can be used to overwrite the defaults.
@@ -503,7 +503,7 @@ class Map():
         """
         arguments = _parseArgs(locals())
 
-        myname = 'labelParallelAtMeridian'
+        myname = 'labelParallelsAtMeridian'
         if myname not in self._config.keys():
             self._config[myname] = dict()
 
