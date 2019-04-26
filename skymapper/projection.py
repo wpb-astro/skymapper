@@ -116,7 +116,7 @@ class BaseProjection(object):
             y_ = y
         assert len(x_) == len(y_)
 
-        bounds = ((-180, 180), (-90, 90)) # ra/dec limits
+        bounds = ((None,None), (-90, 90)) # ra/dec limits
         start = (self.ra_0,0) # ra/dec of initial guess: should be close to map center
         ra, dec = np.empty(len(x_)), np.empty(len(y_))
         i = 0
@@ -129,7 +129,6 @@ class BaseProjection(object):
                 ra[i], dec[i] = -1000, -1000
             i += 1
 
-        ra_ = self._wrapRA(ra)
         if not hasattr(x, '__iter__'):
             return ra[0], dec[0]
         return ra, dec
