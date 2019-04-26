@@ -343,9 +343,11 @@ class Map():
         self._ra_range = np.linspace(ra_min, ra_max, self._resolution) + self.proj.ra_0
         _parallels = np.arange(-90+sep,90,sep)
         if self.proj.ra_0 % sep == 0:
-            _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep - 1), -sep)
+            _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep - 1), sep * ((self.proj.ra_0 - 180) // sep), -sep)
         else:
             _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
+        _meridians[_meridians < 0] += 360
+        _meridians[_meridians >= 360] -= 360
 
         # clean up previous grid
         artists = self.artists('grid-meridian') + self.artists('grid-parallel')
@@ -390,10 +392,7 @@ class Map():
                     ra = [self.proj.ra_0,] * 3
                     jac = np.sum(self.proj.gradient(ra, dec)**2, axis=1)
                     p = dec[np.argmax(jac)]
-                    # remove outer meridians to prevent overlap with parallel label
-                    if p == 0 and self.proj.ra_0 % sep == 0:
-                        _meridians = _meridians[1:-1]
-                    getattr(self, method)(p, meridians=_meridians)
+                    getattr(self, method)(p)
                 # label both outer meridians
                 else:
                     degs = [self.proj.ra_0 + 180, self.proj.ra_0 - 180]
@@ -621,7 +620,7 @@ class Map():
         frame_artists = self.artists(r'frame-([a-zA-Z]+)', regex=True)
         frame_locs = [match.group(1) for c,match in frame_artists]
         if loc in frame_locs:
-            # find all parallel grid lines
+            # find all meridian grid lines
             m_artists = self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
             for c,match in m_artists:
                 m = float(match.group(1))
