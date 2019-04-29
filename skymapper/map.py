@@ -1063,16 +1063,49 @@ class Map():
         vertices_ = np.empty_like(vertices)
         vertices_[:,:,0], vertices_[:,:,1] = self.proj.transform(vertices[:,:,0], vertices[:,:,1])
 
+        # remove vertices which are split at the outer meridians
+        sel = (np.sum(np.diff(vertices_, axis=1)**2, axis=-1) < 0.1).all(axis=-1)
+        vertices_ = vertices_[sel]
+
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        rasterized = kwargs.pop("rasterized", True)
-        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, **kwargs)
+        coll = PolyCollection(vertices_, zorder=zorder, **kwargs)
         if color is not None:
-            coll.set_array(color)
+            coll.set_array(color[sel])
             coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
         self.ax.add_collection(coll)
         return coll
+
+    def healpix(self, m, nest=False, color_percentiles=[10,90], **kwargs):
+        """Plot HealPix map
+
+        Args:
+            m: Healpix map array
+            nest: HealPix nest
+            color_percentiles: lower and higher cutoff percentile for map coloring
+        """
+        # determine ra, dec of map; restrict to non-empty cells
+        pixels = np.flatnonzero(m)
+        nside = healpix.hp.npix2nside(m.size)
+        vertices = healpix.getHealpixVertices(pixels, nside, nest=nest)
+        color = m[pixels]
+
+        # color range
+        vmin = kwargs.pop("vmin", None)
+        vmax = kwargs.pop("vmax", None)
+        if vmin is None or vmax is None:
+            vlim = np.percentile(color, color_percentiles)
+            if vmin is None:
+                vmin = vlim[0]
+            if vmax is None:
+                vmax = vlim[1]
+
+        # make a map of the vertices
+        cmap = kwargs.pop("cmap", "YlOrRd")
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        rasterized = kwargs.pop("rasterized", True)
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, rasterized=rasterized, **kwargs)
 
     def footprint(self, survey, nside, weight=False, **kwargs):
         """Plot survey footprint onto map
@@ -1094,37 +1127,9 @@ class Map():
             inside = survey.contains(rap, decp)
             weight = None
 
-        # since this is normally an all sky map, clip at the map edge
+        # make map
+        rasterized = kwargs.pop("rasterized", True)
         return self.vertex(vertices[inside], color=weight, **kwargs)
-
-    def healpix(self, m, nest=False, color_percentiles=[10,90], **kwargs):
-        """Plot HealPix map
-
-        Args:
-            m: Healpix map array
-            nest: HealPix nest
-            color_percentiles: lower and higher cutoff percentile for map coloring
-        """
-        # determine ra, dec of map; restrict to non-empty cells
-        pixels = np.flatnonzero(m)
-        nside = healpix.hp.npix2nside(m.size)
-        vertices = healpix.getHealpixVertices(pixels, nside, nest=nest)
-        color = m[pixels]
-
-        # styling
-        cmap = kwargs.pop("cmap", "YlOrRd")
-        vmin = kwargs.pop("vmin", None)
-        vmax = kwargs.pop("vmax", None)
-        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        if vmin is None or vmax is None:
-            vlim = np.percentile(color, color_percentiles)
-            if vmin is None:
-                vmin = vlim[0]
-            if vmax is None:
-                vmax = vlim[1]
-
-        # make a map of the vertices
-        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, **kwargs)
 
     def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
         """Plot sample density using healpix binning
@@ -1136,14 +1141,12 @@ class Map():
             color_percentiles: lower and higher cutoff percentile for map coloring
         """
         # get count in healpix cells, restrict to non-empty cells
-        bc, _, _, vertices = healpix.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
+        bc, rap, decp, vertices = healpix.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
         color = bc
 
-        # styling
-        cmap = kwargs.pop("cmap", "YlOrRd")
+        # color range
         vmin = kwargs.pop("vmin", None)
         vmax = kwargs.pop("vmax", None)
-        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         if vmin is None or vmax is None:
             vlim = np.percentile(color, color_percentiles)
             if vmin is None:
@@ -1151,8 +1154,13 @@ class Map():
             if vmax is None:
                 vmax = vlim[1]
 
-        # make a map of the vertices
-        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, **kwargs)
+        # styling
+        cmap = kwargs.pop("cmap", "YlOrRd")
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        rasterized = kwargs.pop('rasterized', True)
+
+        # make map
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, rasterized=rasterized, **kwargs)
 
     def interpolate(self, ra, dec, value, nside, **kwargs):
         """Interpolate ra,dec samples over covered region in the map
@@ -1167,7 +1175,8 @@ class Map():
             **kwargs: arguments for matplotlib.imshow
         """
         vp, rap, decp, vertices = healpix.reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=nside, return_vertices=True)
-        return self.vertex(vertices, color=vp, **kwargs)
+        rasterized = kwargs.pop('rasterized', True)
+        return self.vertex(vertices, color=vp, rasterized=rasterized, **kwargs)
 
     def extrapolate(self, ra, dec, value, nside, **kwargs):
         """Extrapolate ra,dec samples on the entire sphere and project on the map
@@ -1185,10 +1194,12 @@ class Map():
         # interpolate samples in RA/DEC
         rbfi = scipy.interpolate.Rbf(ra, dec, value, norm=skyDistance)
 
-        # make grid in ra/dec
+        # grid in ra/dec
         rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
         vp = rbfi(rap, decp)
 
         # since this is normally an all sky map, clip at the map edge
-        clip_path = kwargs.pop('clip_path', self._edge)
-        return self.vertex(vertices, color=vp, clip_path=clip_path, **kwargs)
+        #clip_path = kwargs.pop('clip_path', self._edge)
+        rasterized = kwargs.pop('rasterized', True)
+        # return self.vertex(vertices, color=vp, clip_path=clip_path, rasterized=rasterized, **kwargs)
+        return self.vertex(vertices, color=vp, rasterized=rasterized, **kwargs)

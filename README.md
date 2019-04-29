@@ -69,8 +69,9 @@ Dependencies:
 * numpy
 * scipy
 * matplotlib
+* healpy
 
-For the healpix methods, you'll need `healpy`.
+For most survey footprints, you'll need [`pymangle`](https://github.com/esheldon/pymangle).
 
 ## Background
 
