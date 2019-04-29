@@ -1069,12 +1069,14 @@ class Map():
 
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        coll = PolyCollection(vertices_, zorder=zorder, **kwargs)
+        rasterized = kwargs.pop('rasterized', True)
+        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, **kwargs)
         if color is not None:
             coll.set_array(color[sel])
             coll.set_clim(vmin=vmin, vmax=vmax)
         coll.set_edgecolor("face")
         self.ax.add_collection(coll)
+        self.ax.set_rasterization_zorder(zorder)
         return coll
 
     def healpix(self, m, nest=False, color_percentiles=[10,90], **kwargs):
@@ -1103,9 +1105,7 @@ class Map():
 
         # make a map of the vertices
         cmap = kwargs.pop("cmap", "YlOrRd")
-        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        rasterized = kwargs.pop("rasterized", True)
-        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, rasterized=rasterized, **kwargs)
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
     def footprint(self, survey, nside, weight=False, **kwargs):
         """Plot survey footprint onto map
@@ -1127,8 +1127,6 @@ class Map():
             inside = survey.contains(rap, decp)
             weight = None
 
-        # make map
-        rasterized = kwargs.pop("rasterized", True)
         return self.vertex(vertices[inside], color=weight, **kwargs)
 
     def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
@@ -1156,11 +1154,9 @@ class Map():
 
         # styling
         cmap = kwargs.pop("cmap", "YlOrRd")
-        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
-        rasterized = kwargs.pop('rasterized', True)
 
         # make map
-        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, zorder=zorder, rasterized=rasterized, **kwargs)
+        return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
     def interpolate(self, ra, dec, value, nside, **kwargs):
         """Interpolate ra,dec samples over covered region in the map
@@ -1175,8 +1171,7 @@ class Map():
             **kwargs: arguments for matplotlib.imshow
         """
         vp, rap, decp, vertices = healpix.reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=nside, return_vertices=True)
-        rasterized = kwargs.pop('rasterized', True)
-        return self.vertex(vertices, color=vp, rasterized=rasterized, **kwargs)
+        return self.vertex(vertices, color=vp, **kwargs)
 
     def extrapolate(self, ra, dec, value, nside, **kwargs):
         """Extrapolate ra,dec samples on the entire sphere and project on the map
@@ -1198,8 +1193,4 @@ class Map():
         rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
         vp = rbfi(rap, decp)
 
-        # since this is normally an all sky map, clip at the map edge
-        #clip_path = kwargs.pop('clip_path', self._edge)
-        rasterized = kwargs.pop('rasterized', True)
-        # return self.vertex(vertices, color=vp, clip_path=clip_path, rasterized=rasterized, **kwargs)
-        return self.vertex(vertices, color=vp, rasterized=rasterized, **kwargs)
+        return self.vertex(vertices, color=vp, **kwargs)
