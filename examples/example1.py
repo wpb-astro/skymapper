@@ -96,7 +96,7 @@ if __name__ == "__main__":
     cb3 = map3.colorbar(mappable3, cb_label='Dec')
 
     # add footprint shade
-    footprint3 = map3.footprint(des, nside=nside, zorder=20, facecolors='k', alpha=0.1)
+    footprint3 = map3.footprint(des, nside=nside, zorder=20, facecolors='w', alpha=0.2)
 
     map3.fig.suptitle('Extrapolation on the sphere')
 

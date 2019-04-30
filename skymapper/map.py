@@ -1064,14 +1064,22 @@ class Map():
         vertices_[:,:,0], vertices_[:,:,1] = self.proj.transform(vertices[:,:,0], vertices[:,:,1])
 
         # remove vertices which are split at the outer meridians
-        sel = (np.sum(np.diff(vertices_, axis=1)**2, axis=-1) < 0.1).all(axis=-1)
+        # find variance of vertice nodes large compared to dispersion of centers
+        centers = np.mean(vertices, axis=1)
+        x, y = self.proj.transform(centers[:,0], centers[:,1])
+        var = np.sum(np.var(vertices_, axis=1), axis=-1) / (x.var() + y.var())
+        sel = var < 0.05
         vertices_ = vertices_[sel]
 
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         rasterized = kwargs.pop('rasterized', True)
-        lw = kwargs.pop('lw', 0)
-        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, lw=lw, **kwargs)
+        alpha = kwargs.pop('alpha', 1)
+        if alpha < 1:
+            lw = kwargs.pop('lw', 0)
+        else:
+            lw = kwargs.pop('lw', None)
+        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, alpha=alpha, lw=lw, **kwargs)
         if color is not None:
             coll.set_array(color[sel])
             coll.set_clim(vmin=vmin, vmax=vmax)
