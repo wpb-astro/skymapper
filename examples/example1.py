@@ -101,16 +101,10 @@ if __name__ == "__main__":
     map3.fig.suptitle('Extrapolation on the sphere')
 
     #### 4. test Healpix map functions ####
-    try:
-        # simply bin the counts of ra/dec
-        m = makeHealpixMap(ra, dec, nside=nside)
+    map4 = map.clone()
 
-        map4 = map.clone()
-        #footprint4 = map4.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
-
-        mappable4 = map4.healpix(m, cmap="YlOrRd")
-        cb4 = map4.colorbar(mappable4, cb_label="Healpix cell count")
-        map4.fig.suptitle('Healpix map')
-
-    except ImportError:
-        pass
+    # simply bin the counts of ra/dec
+    m = makeHealpixMap(ra, dec, nside=nside)
+    mappable4 = map4.healpix(m, cmap="YlOrRd")
+    cb4 = map4.colorbar(mappable4, cb_label="Healpix cell count")
+    map4.fig.suptitle('Healpix map')

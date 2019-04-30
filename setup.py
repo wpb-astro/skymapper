@@ -25,5 +25,5 @@ setup(
         "Topic :: Scientific/Engineering :: Astronomy"
     ],
     keywords = ['visualization','map projection','matplotlib'],
-    requires=["matplotlib", "numpy", "scipy"]
+    requires=["matplotlib", "numpy", "scipy", "healpy"]
 )

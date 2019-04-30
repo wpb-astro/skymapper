@@ -13,8 +13,6 @@ def getHealpixArea(nside):
 def getHealpixVertices(pixels, nside, nest=False):
     """Get polygon vertices for list of HealPix pixels.
 
-    Requires: healpy
-
     Args:
         pixels: list of HealPix pixels
         nside: HealPix nside
@@ -47,8 +45,6 @@ def getGrid(nside, nest=False, return_vertices=False):
 
 def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False):
     """Get number density of objects from RA/Dec in HealPix cells.
-
-    Requires: healpy
 
     Args:
         ra: list of rectascensions
@@ -88,8 +84,6 @@ def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False
 
 def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vertices=False):
     """Reduce values at given RA/Dec in HealPix cells to a scalar.
-
-    Requires: healpy
 
     Args:
         ra: list of rectascensions
