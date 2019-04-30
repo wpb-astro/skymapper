@@ -1166,7 +1166,7 @@ class Map():
         return self.vertex(vertices, color=vp, **kwargs)
 
 
-    def extrapolate(self, ra, dec, value, nside, **kwargs):
+    def extrapolate(self, ra, dec, value, resolution=100, **kwargs):
         """Extrapolate ra,dec,value samples on the entire sphere
 
         Requires scipy, uses `scipy.interpolate.Rbf`.
@@ -1175,15 +1175,46 @@ class Map():
             ra: list of rectascensions
             dec: list of declinations
             value: list of sample values
-            nside: Healpix nside for spatial resolution
-            clean_edge: use another interpolation to generate clean edge of the map
+            resolution: number of evaluated cells per linear map dimension
             **kwargs: arguments for matplotlib.imshow
         """
         # interpolate samples in RA/DEC
         rbfi = scipy.interpolate.Rbf(ra, dec, value, norm=skyDistance)
 
-        # grid in ra/dec
-        rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
-        vp = rbfi(rap, decp)
+        # make grid in x/y over the limits of the map or the clip_path
+        clip_path = kwargs.pop('clip_path', self._edge)
+        if clip_path is None:
+            xlim, ylim = self.xlim(), self.ylim()
+        else:
+            xlim = clip_path.xy[:, 0].min(), clip_path.xy[:, 0].max()
+            ylim = clip_path.xy[:, 1].min(), clip_path.xy[:, 1].max()
 
-        return self.vertex(vertices, color=vp, **kwargs)
+        if resolution % 1 == 0:
+            resolution += 1
+
+        dx = (xlim[1]-xlim[0])/resolution
+        xline = np.arange(xlim[0], xlim[1], dx)
+        yline = np.arange(ylim[0], ylim[1], dx)
+        xp, yp = np.meshgrid(xline, yline) + dx/2 # evaluate center pixel
+        inside = self.contains(xp,yp)
+        vp = np.ma.array(np.empty(xp.shape), mask=~inside)
+
+        rap, decp = self.proj.invert(xp[inside], yp[inside])
+        vp[inside] = rbfi(rap, decp)
+
+        # xp,yp whose centers aren't in the map have no values:
+        # edges of map are not clean
+        # construct another rbf in pixel space to populate the values
+        # outside of the map region, then use clip-path to clip them at the edges
+        # ordinary Euclidean distance now
+        rbfi = scipy.interpolate.Rbf(xp[inside], yp[inside], vp[inside])
+        vp[~inside] = rbfi(xp[~inside], yp[~inside])
+
+        zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
+        xlim_, ylim_ = self.ax.get_xlim(), self.ax.get_ylim()
+        artist = self.ax.imshow(vp, extent=(xlim[0], xlim[1], ylim[0], ylim[1]), zorder=zorder, **kwargs)
+        artist.set_clip_path(clip_path)
+        # ... because imshow focusses on extent
+        self.ax.set_xlim(xlim_)
+        self.ax.set_ylim(ylim_)
+        return artist

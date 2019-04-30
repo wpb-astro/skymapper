@@ -92,7 +92,7 @@ if __name__ == "__main__":
     map3.labelMeridiansAtParallel(-90, size=8, meridians=np.arange(0,360,90))
 
     # this is slow when working with lots of samples...
-    mappable3 = map3.extrapolate(ra[::10], dec[::10], dec[::10], nside=nside)
+    mappable3 = map3.extrapolate(ra[::10], dec[::10], dec[::10], resolution=100)
     cb3 = map3.colorbar(mappable3, cb_label='Dec')
 
     # add footprint shade
