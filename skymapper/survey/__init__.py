@@ -25,12 +25,24 @@ class Meta(type):
 class Survey(with_metaclass(Meta, BaseSurvey)):
     pass
 
-class DES(Survey):
-    def __init__(self):
-        import pymangle
-        # get survey polygon data
-        this_dir, this_filename = os.path.split(__file__)
-        self.m = pymangle.Mangle(os.path.join(this_dir, "des-round17-poly_tidy.ply"))
+try:
+    import pymangle
 
-    def contains(self, ra, dec):
-        return self.m.contains(ra, dec)
+    class MangleSurvey(pymangle.Mangle, Survey):
+        def __init__(self, filename, verbose=True):
+            pymangle.Mangle.__init__(self, filename, verbose=verbose)
+
+    class DES(MangleSurvey):
+        def __init__(self):
+            # get survey polygon data
+            this_dir, this_filename = os.path.split(__file__)
+            MangleSurvey.__init__(self, os.path.join(this_dir, "des-round17-poly_tidy.ply"))
+
+    class BOSS(MangleSurvey):
+        def __init__(self):
+            # get survey polygon data
+            this_dir, this_filename = os.path.split(__file__)
+            MangleSurvey.__init__(self, os.path.join(this_dir, "boss_survey.ply"))
+
+except ImportError:
+    print("Warning: surveys missing because pymangle is not installed")
