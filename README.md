@@ -52,8 +52,8 @@ as well as special functions
 * `footprint` to load a RA/Dec list and turn it into a closed polygon
 * `vertex` to plot a list of simple convex polygons
 * `healpix` to plot a healpix map as a list of polygons
-* `density` to create a density map (see example above)
-* `interpolate` to interpolate given samples over their convex hull
+* `density` to create a density map in healpix cells
+* `bin` to compute aggregate statistics (mean, std, count) of samples in healpix cells
 * `extrapolate` to generate a field from samples over the entire sky or a subregion 
 
 ## Installation and Prerequisites
@@ -97,10 +97,11 @@ This optimizes the `Albers` projection parameters to minimize the variance of th
 
 ### Defining a survey
 
-To make it easy to share survey footprints and optimal projections, we can hold them in a common place. To create one you only need to derive a class from [`Survey`](skymapper/survey/__init__.py), which only needs to implement two methods:
+To make it easy to share survey footprints (and possibly optimal projections etc.), we can hold them in a common place. To create one you only need to derive a class from [`Survey`](skymapper/survey/__init__.py), which only needs to implement one method:
 
-* `getFootprint` to return a RA, Dec list of the footprint
-* `getConfigfile` to return the full path of a pickled map configuration, created by `Map.save`. 
+​	`def contains(self, ra, dec)` to determine whether RA, Dec are inside the footprint
+
+If this looks like the [`pymangle`](https://github.com/esheldon/pymangle) interface: it should. That means that you can avoid the overhead of having to define a survey and pass a `pymangle.Mangle` object directly to `footprint()`.
 
 ### Defining a projection
 

@@ -89,7 +89,7 @@ def reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=512, return_vert
         ra: list of rectascensions
         dec: list of declinations
         value: list of values to be reduced
-        reduce_fct: function to operate on values
+        reduce_fct: function to operate on values in each cell
         nside: HealPix nside
         per_area: return counts in units of 1/arcmin^2
         return_vertices: whether to also return the boundaries of HealPix cells

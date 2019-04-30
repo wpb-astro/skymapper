@@ -1107,7 +1107,7 @@ class Map():
         cmap = kwargs.pop("cmap", "YlOrRd")
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
-    def footprint(self, survey, nside, weight=False, **kwargs):
+    def footprint(self, survey, nside, **kwargs):
         """Plot survey footprint onto map
 
         Uses `contains()` method of a `skymapper.Survey` derived class instance
@@ -1119,15 +1119,8 @@ class Map():
         """
 
         rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
-        if weight:
-            weight = survey.weight(rap, decp)
-            inside = weight > 0
-            weight = weight[inside]
-        else:
-            inside = survey.contains(rap, decp)
-            weight = None
-
-        return self.vertex(vertices[inside], color=weight, **kwargs)
+        inside = survey.contains(rap, decp)
+        return self.vertex(vertices[inside], **kwargs)
 
     def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
         """Plot sample density using healpix binning
@@ -1158,25 +1151,25 @@ class Map():
         # make map
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
-    def interpolate(self, ra, dec, value, nside, **kwargs):
-        """Interpolate ra,dec samples over covered region in the map
-
-        Requires scipy, uses `scipy.interpolate.griddata` with `method='cubic'`.
+    def bin(self, ra, dec, value, nside, reduce_fct=np.mean, **kwargs):
+        """Bin ra,dec,value samples in covered region into healpix cells.
 
         Args:
             ra: list of rectascensions
             dec: list of declinations
             value: list of sample values
             nside: Healpix nside for spatial resolution
+            reduce_fct: function to operate on values in each cell
             **kwargs: arguments for matplotlib.imshow
         """
         vp, rap, decp, vertices = healpix.reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=nside, return_vertices=True)
         return self.vertex(vertices, color=vp, **kwargs)
 
-    def extrapolate(self, ra, dec, value, nside, **kwargs):
-        """Extrapolate ra,dec samples on the entire sphere and project on the map
 
-        Requires scipy, uses default `scipy.interpolate.Rbf`.
+    def extrapolate(self, ra, dec, value, nside, **kwargs):
+        """Extrapolate ra,dec,value samples on the entire sphere
+
+        Requires scipy, uses `scipy.interpolate.Rbf`.
 
         Args:
             ra: list of rectascensions
