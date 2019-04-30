@@ -943,11 +943,33 @@ class Tobler(HyperElliptical):
 
 
 class EqualEarth(Projection):
+    """Equal Earth projection.
+
+    The Equal Earth projection is a pseudo-cylindrical equal-area projection
+    with modest distortion.
+
+    See https://doi.org/10.1080/13658816.2018.1504949 for details.
+    """
     def __init__(self, ra_0):
         self.ra_0 = ra_0
+        self.A1 = 1.340264
+        self.A2 = -0.081106
+        self.A3 = 0.000893
+        self.A4 = 0.003796
+        self.sqrt3 = np.sqrt(3)
 
-    def forward(self, ra, dec):
-        pass
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
 
-    def invert(self, x, y):
-        pass
+        t = np.arcsin(self.sqrt3/2 * np.sin(dec_ * DEG2RAD))
+        t2 = t*t
+        t6 = t2*t2*t2
+        x = 2/3*self.sqrt3 * ra_ * DEG2RAD * np.cos(t) / (self.A1 + 3*self.A2*t2 + t6*(7*self.A3 + 9*self.A4*t2))
+        y = t*(self.A1 + self.A2*t2 + t6*(self.A3 + self.A4*t2))
+
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
