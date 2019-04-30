@@ -40,8 +40,8 @@ def getGrid(nside, nest=False, return_vertices=False):
     dec = 90 - theta*180/np.pi
     if return_vertices:
         vertices = getHealpixVertices(pixels, nside, nest=nest)
-        return ra, dec, vertices
-    return ra, dec
+        return pixels, ra, dec, vertices
+    return pixels, ra, dec
 
 def getCountAtLocations(ra, dec, nside=512, per_area=True, return_vertices=False):
     """Get number density of objects from RA/Dec in HealPix cells.

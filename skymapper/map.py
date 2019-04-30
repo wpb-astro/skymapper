@@ -1070,7 +1070,8 @@ class Map():
         from matplotlib.collections import PolyCollection
         zorder = kwargs.pop("zorder", 0) # same as for imshow: underneath everything
         rasterized = kwargs.pop('rasterized', True)
-        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, **kwargs)
+        lw = kwargs.pop('lw', 0)
+        coll = PolyCollection(vertices_, zorder=zorder, rasterized=rasterized, lw=lw, **kwargs)
         if color is not None:
             coll.set_array(color[sel])
             coll.set_clim(vmin=vmin, vmax=vmax)
@@ -1118,7 +1119,7 @@ class Map():
             **kwargs: styling of `matplotlib.collections.PolyCollection`
         """
 
-        rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
+        pixels, rap, decp, vertices = healpix.getGrid(nside, return_vertices=True)
         inside = survey.contains(rap, decp)
         return self.vertex(vertices[inside], **kwargs)
 
