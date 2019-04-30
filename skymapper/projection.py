@@ -285,6 +285,9 @@ class BaseProjection(object):
         bounds = ((0, 360),)
         return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
 
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.ra_0)
+
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
@@ -354,6 +357,9 @@ class ConicProjection(BaseProjection):
         bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
         return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
 
+    def __repr__(self):
+        return "%s(%r,%r,%r,%r)" % (self.__class__.__name__, self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+
 
 class Albers(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -408,8 +414,6 @@ class Albers(ConicProjection, Projection):
         dec = np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
         return ra, dec
 
-    def __repr__(self):
-        return "Albers(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 class LambertConformal(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -479,9 +483,6 @@ class LambertConformal(ConicProjection, Projection):
         dec = (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
         return ra, dec
 
-    def __repr__(self):
-        return "LambertConformal(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
-
 
 class Equidistant(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -533,9 +534,6 @@ class Equidistant(ConicProjection, Projection):
         dec = (self.G - rho)/ DEG2RAD
         return ra, dec
 
-    def __repr__(self):
-        return "Equidistant(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
-
 
 class Hammer(Projection):
     def __init__(self, ra_0):
@@ -566,9 +564,6 @@ class Hammer(Projection):
         ra = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
         ra = self._unwrapRA(ra)
         return ra, dec
-
-    def __repr__(self):
-        return "Hammer(%r)" % self.ra_0
 
 
 class Mollweide(Projection):
@@ -668,6 +663,7 @@ class EckertIV(Projection):
                 break
             t = t_
         return t
+
 
 class WagnerI(Projection):
     def __init__(self, ra_0):
@@ -944,3 +940,14 @@ class Tobler(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0., 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
+
+
+class EqualEarth(Projection):
+    def __init__(self, ra_0):
+        self.ra_0 = ra_0
+
+    def forward(self, ra, dec):
+        pass
+
+    def invert(self, x, y):
+        pass
