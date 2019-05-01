@@ -70,7 +70,7 @@ if __name__ == "__main__":
     map.focus(ra, dec)
 
     # entitle: access mpl figure
-    map.fig.suptitle('Density with random scatter')
+    map.title('Density with random scatter')
 
     # copy map without data contents
     map2 = map.clone()
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     a,b = proj.distortion(ra, dec)
     mappable2 = map2.bin(ra, dec, 1-np.abs(b/a), 32, vmin=0, vmax=0.3, cmap='RdYlBu_r')
     cb2 = map2.colorbar(mappable2, cb_label='Distortion')
-    map2.fig.suptitle('Projection distortion')
+    map2.title('Projection distortion')
 
     #### 3. extrapolate RA over all sky ####
     map3 = skm.Map(proj)
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     # add footprint shade
     footprint3 = map3.footprint(des, nside=nside, zorder=20, facecolors='w', alpha=0.2)
 
-    map3.fig.suptitle('Extrapolation on the sphere')
+    map3.title('Extrapolation on the sphere')
 
     #### 4. test Healpix map functions ####
     map4 = map.clone()
@@ -107,4 +107,4 @@ if __name__ == "__main__":
     m = makeHealpixMap(ra, dec, nside=nside)
     mappable4 = map4.healpix(m, cmap="YlOrRd")
     cb4 = map4.colorbar(mappable4, cb_label="Healpix cell count")
-    map4.fig.suptitle('Healpix map')
+    map4.title('Healpix map')

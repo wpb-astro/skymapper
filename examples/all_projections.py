@@ -1,6 +1,5 @@
 import skymapper as skm
 import matplotlib.pyplot as plt
-import inspect
 
 if __name__ == "__main__":
 
@@ -15,7 +14,6 @@ if __name__ == "__main__":
 
     for name, proj_cls in skm.projection_register.items():
         proj = None
-        signature = inspect.signature(proj_cls.__init__)
         try:
             proj = proj_cls(**args)
         except TypeError:
@@ -23,9 +21,9 @@ if __name__ == "__main__":
                 proj = proj_cls(**conic_args)
             except TypeError:
                 pass
-                
+
         if proj is not None:
             map = skm.Map(proj, interactive=False)
             map.grid()
-            map.fig.suptitle(name)
+            map.title(name)
             map.show()

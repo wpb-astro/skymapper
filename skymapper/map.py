@@ -994,6 +994,9 @@ class Map():
         self.fig.tight_layout(pad=0.75)
         return cb
 
+    def title(self, label, **kwargs):
+        return self.fig.suptitle(label, **kwargs)
+
     def focus(self, ra, dec, pad=0.025):
         """Focus onto region of map covered by `ra/dec`
 

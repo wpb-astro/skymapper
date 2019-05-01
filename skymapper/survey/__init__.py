@@ -29,7 +29,7 @@ try:
     import pymangle
 
     class MangleSurvey(pymangle.Mangle, Survey):
-        def __init__(self, filename, verbose=True):
+        def __init__(self, filename, verbose=False):
             pymangle.Mangle.__init__(self, filename, verbose=verbose)
 
     class DES(MangleSurvey):
