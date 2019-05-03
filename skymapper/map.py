@@ -1,4 +1,5 @@
 import matplotlib
+import matplotlib.pyplot
 import numpy as np
 import re, pickle
 import scipy.interpolate
@@ -601,11 +602,23 @@ class Map():
             xdelta = 0
             for c,match in frame_artists:
                 if match.group(1) in locs.keys():
-                    xdelta_ = c.get_xdata()[-1] - c.get_xdata()[0]
+                    xdata = c.get_xdata()
+                    xdelta_ = xdata[-1] - xdata[0]
                     if xdelta_ > xdelta:
                         xdelta = xdelta_
                         loc = match.group(1)
-
+                    elif xdelta_ == xdelta: # top and bottom frame equally large
+                        # pick the largest meridian gradient in the middle of the frame
+                        xmean = xdata.mean()
+                        ylim = self.ax.get_ylim()
+                        m_bottom, p_ = self.proj.invert(xmean, ylim[0])
+                        grad_bottom = np.abs(self.proj.gradient(m_bottom, p_, direction="parallel")[0])
+                        m_top, p_ = self.proj.invert(xmean, ylim[1])
+                        grad_top = np.abs(self.proj.gradient(m_top, p_, direction="parallel")[0])
+                        if grad_top > grad_bottom:
+                            loc = 'top'
+                        else:
+                            loc = 'bottom'
         if loc not in frame_locs:
             return
 
@@ -709,10 +722,23 @@ class Map():
             ydelta = 0
             for c,match in frame_artists:
                 if match.group(1) in locs.keys():
-                    ydelta_ = c.get_ydata()[-1] - c.get_ydata()[0]
+                    ydata = c.get_ydata()
+                    ydelta_ = ydata[-1] - ydata[0]
                     if ydelta_ > ydelta:
                         ydelta = ydelta_
                         loc = match.group(1)
+                    elif ydelta_ == ydelta: # top and bottom frame equally large
+                        # pick the largest meridian gradient in the middle of the frame
+                        ymean = ydata.mean()
+                        xlim = self.ax.get_xlim()
+                        m_, p_left = self.proj.invert(xlim[0], ymean)
+                        grad_left = np.abs(self.proj.gradient(m_, p_left, direction="meridian")[1])
+                        m_, p_right = self.proj.invert(xlim[1], ymean)
+                        grad_right = np.abs(self.proj.gradient(m_, p_right, direction="meridian")[1])
+                        if grad_right > grad_left:
+                            loc = 'right'
+                        else:
+                            loc = 'left'
 
         if loc not in frame_locs:
             return
