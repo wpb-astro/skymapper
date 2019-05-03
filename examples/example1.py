@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
     #### 2. show map distortion over the survey ####
     a,b = proj.distortion(ra, dec)
-    mappable2 = map2.bin(ra, dec, 1-np.abs(b/a), 32, vmin=0, vmax=0.3, cmap='RdYlBu_r')
+    mappable2 = map2.hexbin(ra, dec, C=1-np.abs(b/a), vmin=0, vmax=0.3, cmap='RdYlBu_r')
     cb2 = map2.colorbar(mappable2, cb_label='Distortion')
     map2.title('Projection distortion')
 

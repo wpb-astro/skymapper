@@ -924,7 +924,8 @@ class Map():
         if gridsize is None:
             xlim, ylim = (x.min(), x.max()), (y.min(), y.max())
             per_sample_volume = (xlim[1]-xlim[0])**2 / x.size * 10
-            gridsize = int(np.ceil((xlim[1]-xlim[0]) / np.sqrt(per_sample_volume)))
+            gridsize = (int(np.round((xlim[1]-xlim[0]) / np.sqrt(per_sample_volume))),
+                        int(np.round((ylim[1]-ylim[0]) / np.sqrt(per_sample_volume)) / np.sqrt(3)))
 
         # styling: use same default colormap as density for histogram
         if C is None:
@@ -1162,21 +1163,6 @@ class Map():
 
         # make map
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
-
-    def bin(self, ra, dec, value, nside, reduce_fct=np.mean, **kwargs):
-        """Bin ra,dec,value samples in covered region into healpix cells.
-
-        Args:
-            ra: list of rectascensions
-            dec: list of declinations
-            value: list of sample values
-            nside: Healpix nside for spatial resolution
-            reduce_fct: function to operate on values in each cell
-            **kwargs: arguments for matplotlib.imshow
-        """
-        vp, rap, decp, vertices = healpix.reduceAtLocations(ra, dec, value, reduce_fct=np.mean, nside=nside, return_vertices=True)
-        return self.vertex(vertices, color=vp, **kwargs)
-
 
     def extrapolate(self, ra, dec, value, resolution=100, **kwargs):
         """Extrapolate ra,dec,value samples on the entire sphere

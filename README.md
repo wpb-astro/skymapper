@@ -49,11 +49,10 @@ The syntax mimics `matplotlib` as closely as possible. Currently supported are c
 
 as well as special functions
 
-* `footprint` to load a RA/Dec list and turn it into a closed polygon
+* `footprint` to show the region covered by a survey
 * `vertex` to plot a list of simple convex polygons
 * `healpix` to plot a healpix map as a list of polygons
 * `density` to create a density map in healpix cells
-* `bin` to compute aggregate statistics (mean, std, count) of samples in healpix cells
 * `extrapolate` to generate a field from samples over the entire sky or a subregion 
 
 ## Installation and Prerequisites
