@@ -7,7 +7,7 @@ setup(
     description="Mapping astronomical survey data on the sky, handsomely",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    version="0.2.2",
+    version="0.3",
     license="MIT",
     author="Peter Melchior",
     author_email="peter.m.melchior@gmail.com",
@@ -25,5 +25,5 @@ setup(
         "Topic :: Scientific/Engineering :: Astronomy"
     ],
     keywords = ['visualization','map projection','matplotlib'],
-    requires=["matplotlib", "numpy", "scipy"]
+    requires=["matplotlib", "numpy", "scipy", "healpy"]
 )

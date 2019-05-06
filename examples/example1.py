@@ -3,18 +3,7 @@ import numpy as np
 import skymapper as skm
 import matplotlib.pylab as plt
 
-class Point:
-    def __init__(self,x,y):
-        self.x = x
-        self.y = y
-    def __getitem__(self, i):
-        if i == 0:
-            return self.x
-        elif i == 1:
-            return self.y
-        raise NotImplementedError
-
-def getCatalog(size=10000, surveyname=None):
+def getCatalog(size=10000, survey=None):
     # dummy catalog: uniform on sphere
     # Marsaglia (1972)
     xyz = np.random.normal(size=(size, 3))
@@ -22,12 +11,8 @@ def getCatalog(size=10000, surveyname=None):
     dec = np.arccos(xyz[:,2]/r) / skm.DEG2RAD - 90
     ra = - np.arctan2(xyz[:,0], xyz[:,1]) / skm.DEG2RAD
 
-    if surveyname is not None:
-        from matplotlib.patches import Polygon
-        # construct survey polygon
-        ra_fp, dec_fp = skm.survey_register[surveyname].getFootprint()
-        poly = Polygon(np.dstack((ra_fp,dec_fp))[0], closed=True)
-        inside = [poly.get_path().contains_point(Point(ra_,dec_)) for (ra_,dec_) in zip(ra,dec)]
+    if survey is not None:
+        inside = survey.contains(ra, dec)
         ra = ra[inside]
         dec = dec[inside]
 
@@ -50,7 +35,8 @@ if __name__ == "__main__":
 
     # load RA/Dec from catalog
     size = 100000
-    ra, dec = getCatalog(size, surveyname="DES")
+    des = skm.survey.DES()
+    ra, dec = getCatalog(size, survey=des)
 
     # define the best Albers projection for the footprint
     # minimizing the variation in distortion
@@ -67,12 +53,12 @@ if __name__ == "__main__":
     sep=15
     map.grid(sep=sep)
 
-    # add footprint, retain the polygon for clipping
-    footprint = map.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
-
+    # # add footprint, retain the polygon for clipping
+    # footprint = map.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
+    #
     #### 1. plot density in healpix cells ####
     nside = 32
-    mappable = map.density(ra, dec, nside=nside, clip_path=footprint)
+    mappable = map.density(ra, dec, nside=nside)
     cb = map.colorbar(mappable, cb_label="$n$ [arcmin$^{-2}$]")
 
     # add random scatter plot
@@ -84,17 +70,16 @@ if __name__ == "__main__":
     map.focus(ra, dec)
 
     # entitle: access mpl figure
-    map.fig.suptitle('Density with random scatter')
+    map.title('Density with random scatter')
 
     # copy map without data contents
     map2 = map.clone()
-    footprint2 = map2.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
 
     #### 2. show map distortion over the survey ####
     a,b = proj.distortion(ra, dec)
-    mappable2 = map2.interpolate(ra, dec, 1-np.abs(b/a), vmin=0, vmax=0.3, clip_path=footprint2)
+    mappable2 = map2.hexbin(ra, dec, C=1-np.abs(b/a), vmin=0, vmax=0.3, cmap='RdYlBu_r')
     cb2 = map2.colorbar(mappable2, cb_label='Distortion')
-    map2.fig.suptitle('Projection distortion')
+    map2.title('Projection distortion')
 
     #### 3. extrapolate RA over all sky ####
     map3 = skm.Map(proj)
@@ -104,25 +89,22 @@ if __name__ == "__main__":
     map3.grid(sep=sep)
 
     # alter number of labels at the south pole
-    map3.labelMeridianAtParallel(-90, size=8, meridians=np.arange(0,360,90))
+    map3.labelMeridiansAtParallel(-90, size=8, meridians=np.arange(0,360,90))
 
-    footprint3 = map3.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
     # this is slow when working with lots of samples...
-    mappable3 = map3.extrapolate(ra[::10], dec[::10], dec[::10])
+    mappable3 = map3.extrapolate(ra[::10], dec[::10], dec[::10], resolution=100)
     cb3 = map3.colorbar(mappable3, cb_label='Dec')
-    map3.fig.suptitle('Extrapolation on the sphere')
+
+    # add footprint shade
+    footprint3 = map3.footprint(des, nside=nside, zorder=20, facecolors='w', alpha=0.2)
+
+    map3.title('Extrapolation on the sphere')
 
     #### 4. test Healpix map functions ####
-    try:
-        # simply bin the counts of ra/dec
-        m = makeHealpixMap(ra, dec, nside=nside)
+    map4 = map.clone()
 
-        map4 = map.clone()
-        footprint4 = map4.footprint("DES", zorder=20, edgecolor='#2222B2', facecolor='None', lw=1)
-
-        mappable4 = map4.healpix(m, clip_path=footprint4, cmap="YlOrRd")
-        cb4 = map4.colorbar(mappable2, cb_label="Healpix cell count")
-        map4.fig.suptitle('Healpix map')
-
-    except ImportError:
-        pass
+    # simply bin the counts of ra/dec
+    m = makeHealpixMap(ra, dec, nside=nside)
+    mappable4 = map4.healpix(m, cmap="YlOrRd")
+    cb4 = map4.colorbar(mappable4, cb_label="Healpix cell count")
+    map4.title('Healpix map')

@@ -116,7 +116,7 @@ class BaseProjection(object):
             y_ = y
         assert len(x_) == len(y_)
 
-        bounds = ((-180, 180), (-90, 90)) # ra/dec limits
+        bounds = ((None,None), (-90, 90)) # ra/dec limits
         start = (self.ra_0,0) # ra/dec of initial guess: should be close to map center
         ra, dec = np.empty(len(x_)), np.empty(len(y_))
         i = 0
@@ -129,7 +129,6 @@ class BaseProjection(object):
                 ra[i], dec[i] = -1000, -1000
             i += 1
 
-        ra_ = self._wrapRA(ra)
         if not hasattr(x, '__iter__'):
             return ra[0], dec[0]
         return ra, dec
@@ -286,10 +285,18 @@ class BaseProjection(object):
         bounds = ((0, 360),)
         return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
 
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.ra_0)
+
 
 # metaclass for registration.
 # see https://effectivepython.com/2015/02/02/register-class-existence-with-metaclasses/
-from . import register_projection, projection_register, with_metaclass
+
+from . import register_projection, with_metaclass
+# [blatant copy from six to avoid dependency]
+# python 2 and 3 compatible metaclasses
+# see http://python-future.org/compatible_idioms.html#metaclasses
+
 class Meta(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)
@@ -350,6 +357,9 @@ class ConicProjection(BaseProjection):
         bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
         return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
 
+    def __repr__(self):
+        return "%s(%r,%r,%r,%r)" % (self.__class__.__name__, self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+
 
 class Albers(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -404,8 +414,6 @@ class Albers(ConicProjection, Projection):
         dec = np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
         return ra, dec
 
-    def __repr__(self):
-        return "Albers(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
 
 class LambertConformal(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -475,9 +483,6 @@ class LambertConformal(ConicProjection, Projection):
         dec = (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
         return ra, dec
 
-    def __repr__(self):
-        return "LambertConformal(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
-
 
 class Equidistant(ConicProjection, Projection):
     def __init__(self, ra_0, dec_0, dec_1, dec_2):
@@ -529,9 +534,6 @@ class Equidistant(ConicProjection, Projection):
         dec = (self.G - rho)/ DEG2RAD
         return ra, dec
 
-    def __repr__(self):
-        return "Equidistant(%r, %r, %r, %r)" % (self.ra_0, self.dec_0, self.dec_1, self.dec_2)
-
 
 class Hammer(Projection):
     def __init__(self, ra_0):
@@ -562,9 +564,6 @@ class Hammer(Projection):
         ra = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
         ra = self._unwrapRA(ra)
         return ra, dec
-
-    def __repr__(self):
-        return "Hammer(%r)" % self.ra_0
 
 
 class Mollweide(Projection):
@@ -664,6 +663,7 @@ class EckertIV(Projection):
                 break
             t = t_
         return t
+
 
 class WagnerI(Projection):
     def __init__(self, ra_0):
@@ -940,3 +940,36 @@ class Tobler(HyperElliptical):
     def __init__(self, ra_0):
         alpha, k, gamma = 0., 2.5, 1.183136
         super(Tobler, self).__init__(ra_0, alpha, k, gamma)
+
+
+class EqualEarth(Projection):
+    """Equal Earth projection.
+
+    The Equal Earth projection is a pseudo-cylindrical equal-area projection
+    with modest distortion.
+
+    See https://doi.org/10.1080/13658816.2018.1504949 for details.
+    """
+    def __init__(self, ra_0):
+        self.ra_0 = ra_0
+        self.A1 = 1.340264
+        self.A2 = -0.081106
+        self.A3 = 0.000893
+        self.A4 = 0.003796
+        self.sqrt3 = np.sqrt(3)
+
+    def transform(self, ra, dec):
+        ra_, isArray = _toArray(ra)
+        dec_, isArray = _toArray(dec)
+        ra_ = self._wrapRA(ra_)
+
+        t = np.arcsin(self.sqrt3/2 * np.sin(dec_ * DEG2RAD))
+        t2 = t*t
+        t6 = t2*t2*t2
+        x = 2/3*self.sqrt3 * ra_ * DEG2RAD * np.cos(t) / (self.A1 + 3*self.A2*t2 + t6*(7*self.A3 + 9*self.A4*t2))
+        y = t*(self.A1 + self.A2*t2 + t6*(self.A3 + self.A4*t2))
+
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
