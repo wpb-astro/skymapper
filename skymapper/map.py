@@ -141,7 +141,9 @@ class Map():
             self.fig = self.ax.get_figure()
         self.ax.set_axis_off()
         # do not unset the x/y ticks by e.g. xticks([]), we need them for tight_layout
+        self.ax.xaxis.set_visible(False)
         self.ax.xaxis.set_ticks_position('none')
+        self.ax.yaxis.set_visible(False)
         self.ax.yaxis.set_ticks_position('none')
 
         # attach event handlers
@@ -624,6 +626,7 @@ class Map():
 
         # need extra space for tight_layout to consider the frame annnotations
         # we can't get the actual width, but we can make use the of the default width of the axes tick labels
+        self.ax.xaxis.set_visible(True)
         self.ax.xaxis.set_ticks_position(loc)
         self.ax.xaxis.set_label_position(loc)
         self.fig.tight_layout(pad=0.75)
@@ -745,6 +748,7 @@ class Map():
 
         # need extra space for tight_layout to consider the frame annnotations
         # we can't get the actual width, but we can make use the of the default width of the axes tick labels
+        self.ax.yaxis.set_visible(True)
         self.ax.yaxis.set_ticks_position(loc)
         self.ax.yaxis.set_label_position(loc)
         self.fig.tight_layout(pad=0.75)
