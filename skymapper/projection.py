@@ -41,20 +41,20 @@ def stdDistortionScale(a,b):
     """
     return stdScale(a,b) + stdDistortion(a,b)
 
-def _optimize_objective(x, proj_type, ra, dec, crit):
-    """Construct projections from parameters `x` and compute `crit` for `ra, dec`"""
+def _optimize_objective(x, proj_type, lon, lat, crit):
+    """Construct projections from parameters `x` and compute `crit` for `lon, lat`"""
     proj = proj_type(*x)
-    a, b = proj.distortion(ra, dec)
+    a, b = proj.distortion(lon, lat)
     return crit(a,b)
 
-def _optimize(proj_cls, x0, ra, dec, crit, bounds=None):
-    """Determine parameters for `proj_cls` that minimize `crit` over `ra, dec`.
+def _optimize(proj_cls, x0, lon, lat, crit, bounds=None):
+    """Determine parameters for `proj_cls` that minimize `crit` over `lon, lat`.
 
     Args:
         proj_cls: projection class
         x0: initial arguments for projection class `__init__`
-        ra: list of rectascensions
-        dec: list of declinations
+        lon: list of rectascensions
+        lat: list of declinations
         crit: optimization criterion
             needs to be function of semi-major and semi-minor axes of the Tissot indicatix
         bounds: list of upper and lower bounds on each parameter in `x0`
@@ -63,7 +63,7 @@ def _optimize(proj_cls, x0, ra, dec, crit, bounds=None):
         optimized projection of class `proj_cls`
     """
     print ("optimizing parameters of %s to minimize %s" % (proj_cls.__name__, crit.__name__))
-    x, fmin, d = scipy.optimize.fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, ra, dec, crit), bounds=bounds, approx_grad=True)
+    x, fmin, d = scipy.optimize.fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, lon, lat, crit), bounds=bounds, approx_grad=True)
     print ("Best objective %.6f at %r" % (fmin, x))
     return proj_cls(*x)
 
@@ -75,35 +75,51 @@ class BaseProjection(object):
     """Projection base class
 
     Every projection needs to implement three methods:
-    * `transform(self, ra, dec)`: mapping from ra/dec to map x/y
-    * `invert(self, x, y)`: the inverse mapping from x/y to ra/dec
+    * `transform(self, lon, lat)`: mapping from lon/lat to map x/y
+    * `invert(self, x, y)`: the inverse mapping from x/y to lon/lat
 
     All methods accept either single number or arrays and return accordingly.
     """
-    def __call__(self, ra, dec):
-        return self.transform(ra, dec)
-
-    def transform(self, ra, dec):
-        """Convert RA/Dec into map coordinates
+    def __init__(self, lon_0=0, lon_type="ra"):
+        """Initialize projection
 
         Args:
-            ra:  float or array of floats
-            dec: float or array of floats
+            lon_0 (int, float):  reference longitude
+            lon_type (string): type of longitude
+                needs to be "ra" or "lon" for a coordinates system in ecliptic
+                coordinates (left-handed, 0..360 deg) or conventional
+                (right-handed, -180..180 deg)
+        """
+        assert lon_type in ['ra', 'lon']
+        self.lon_0 = lon_0
+        self.lon_type = lon_type
+
+    def __call__(self, lon, lat):
+        """Shorthand for `transform`
+        """
+        return self.transform(lon, lat)
+
+    def transform(self, lon, lat):
+        """Convert longitude/latitude into map coordinates
+
+        Args:
+            lon:  float or array of floats
+            lat: float or array of floats
 
         Returns:
-            x,y with the same format as ra/dec
+            x,y with the same format as lon,lat
         """
         pass
 
     def invert(self, x, y):
-        """Convert map coordinates into RA/Dec
+        """Convert map coordinates into longitude/latitude
 
         Args:
             x:  float or array of floats
             y: float or array of floats
 
         Returns:
-            RA,Dec with the same format as x/y
+            lon,lat with the same format as x,y
         """
         # default implementation for non-analytic inverses
         if not hasattr(x, '__iter__'):
@@ -116,22 +132,22 @@ class BaseProjection(object):
             y_ = y
         assert len(x_) == len(y_)
 
-        bounds = ((None,None), (-90, 90)) # ra/dec limits
-        start = (self.ra_0,0) # ra/dec of initial guess: should be close to map center
-        ra, dec = np.empty(len(x_)), np.empty(len(y_))
+        bounds = ((None,None), (-90, 90)) # lon/lat limits
+        start = (self.lon_0,0) # lon/lat of initial guess: should be close to map center
+        lon, lat = np.empty(len(x_)), np.empty(len(y_))
         i = 0
         for x__,y__ in zip(x_, y_):
             xy = np.array([x__,y__])
             radec, fmin, d = scipy.optimize.fmin_l_bfgs_b(_dist, start, args=(self, xy), bounds=bounds, approx_grad=True)
             if fmin < 1e-6: # smaller than default tolerance of fmin
-                ra[i], dec[i] = radec
+                lon[i], lat[i] = radec
             else:
-                ra[i], dec[i] = -1000, -1000
+                lon[i], lat[i] = -1000, -1000
             i += 1
 
         if not hasattr(x, '__iter__'):
-            return ra[0], dec[0]
-        return ra, dec
+            return lon[0], lat[0]
+        return lon, lat
 
     @property
     def poleIsPoint(self):
@@ -142,7 +158,7 @@ class BaseProjection(object):
             self._poleIsPoint = {}
             N = 10
             # run along the poles from the left to right outer meridian
-            rnd_meridian = -180 + 360*np.random.rand(N) + self.ra_0
+            rnd_meridian = -180 + 360*np.random.rand(N) + self.lon_0
             for deg in [-90, 90]:
                 line = self.transform(rnd_meridian, deg*np.ones(N))
                 if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
@@ -151,71 +167,75 @@ class BaseProjection(object):
                     self._poleIsPoint[deg] = True
             return self._poleIsPoint
 
-    def _wrapRA(self, ra):
-        """Normalize rectascensions to -180 .. 180, with reference `ra_0` at 0"""
-        ra_, isArray = _toArray(ra)
-        ra_ = self.ra_0 - ra_ # inverse for RA
-        # check that ra_ is between -180 and 180 deg
-        ra_[ra_ < -180 ] += 360
-        ra_[ra_ > 180 ] -= 360
+    def _standardize(self, lon):
+        """Normalize longitude to -180 .. 180, with reference `lon_0` at 0"""
+        lon_, isArray = _toArray(lon)
+        lon_ -= self.lon_0
+        if self.lon_type == "lon":
+            lon_ *= -1 # left-handed
+        # check that lon_ is between -180 and 180 deg
+        lon_[lon_ < -180 ] += 360
+        lon_[lon_ > 180 ] -= 360
         if isArray:
-            return ra_
-        return ra_[0]
+            return lon_
+        return lon_[0]
 
-    def _unwrapRA(self, ra):
-        """Revert `_wrapRA`"""
-        ra_, isArray = _toArray(ra)
-        ra_ = self.ra_0 - ra_
-        ra_ [ra_ < 0] += 360
-        ra_ [ra_ > 360] -= 360
+    def _unstandardize(self, lon):
+        """Revert `_standardize`"""
+        lon_, isArray = _toArray(lon)
+        if self.lon_type == "lon":
+            lon_ *= -1 # left-handed
+        lon_ += self.lon_0
+        lon_ [lon_ < 0] += 360
+        lon_ [lon_ > 360] -= 360
         if isArray:
-            return ra_
-        return ra_[0]
+            return lon_
+        return lon_[0]
 
-    def gradient(self, ra, dec, sep=1e-2, direction='parallel'):
+    def gradient(self, lon, lat, sep=1e-2, direction='parallel'):
         """Compute the gradient in map coordinates at given sky position
 
-        Note: Gradient along parallel is computed in positive RA direction
+        Note: Gradient along parallel is computed in positive lon direction
 
         Args:
-            ra: (list of) rectascension
-            dec: (list of) declination
+            lon: (list of) longitude
+            lat: (list of) latitude
             sep: distance for symmetric first-order derivatives
             direction: tangent direction for gradient, from `['parallel', 'meridian']`
 
         Returns:
-            `dx`, `dy` for every item in `ra/dec`
+            `dx`, `dy` for every item in `lon/lat`
         """
         assert direction in ['parallel', 'meridian']
 
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
 
-        # gradients in *positive* dec and *negative* ra
+        # gradients in *positive* lat and *negative* lon
         if direction == 'parallel':
-            test = np.empty((2, ra_.size))
-            test[0] = ra_-sep/2
-            test[1] = ra_+sep/2
+            test = np.empty((2, lon_.size))
+            test[0] = lon_-sep/2
+            test[1] = lon_+sep/2
 
             # check for points beyond -180 / 180
-            mask = test[0] <= self.ra_0 - 180
-            test[0][mask] = ra_[mask]
-            mask = test[1] >= self.ra_0 + 180
-            test[1][mask] = ra_[mask]
+            mask = test[0] <= self.lon_0 - 180
+            test[0][mask] = lon_[mask]
+            mask = test[1] >= self.lon_0 + 180
+            test[1][mask] = lon_[mask]
 
-            x, y = self.transform(test, np.ones((2,ra_.size))*dec)
+            x, y = self.transform(test, np.ones((2,lon_.size))*lat)
         else:
-            test = np.empty((2, dec_.size))
-            test[0] = dec_-sep/2
-            test[1] = dec_+sep/2
+            test = np.empty((2, lat_.size))
+            test[0] = lat_-sep/2
+            test[1] = lat_+sep/2
 
             # check for points beyond -90 / 90
             mask = test[0] <= -90
-            test[0][mask] = dec_[mask]
+            test[0][mask] = lat_[mask]
             mask = test[1] >= 90
-            test[1][mask] = dec_[mask]
+            test[1][mask] = lat_[mask]
 
-            x, y = self.transform(np.ones((2,dec_.size))*ra, test)
+            x, y = self.transform(np.ones((2,lat_.size))*lon, test)
 
         sep = test[1] - test[0]
         x[0] = (x[1] - x[0])/sep # dx
@@ -224,34 +244,34 @@ class BaseProjection(object):
             return x.T
         return x[:,0]
 
-    def jacobian(self, ra, dec, sep=1e-2):
-        """Jacobian of mapping from ra/dec to map coordinates x/y
+    def jacobian(self, lon, lat, sep=1e-2):
+        """Jacobian of mapping from lon/lat to map coordinates x/y
 
         Args:
-            ra: (list of) rectascension
-            dec: (list of) declination
+            lon: (list of) longitude
+            lat: (list of) latitude
 
         Returns:
-            ((dx/dRA, dx/dDec), (dy/dRA, dy/dDec)) for every item in `ra/dec`
+            ((dx/dlon, dx/dlat), (dy/dlon, dy/dlat)) for every item in `lon/lat`
         """
-        dxy_dra= self.gradient(ra, dec, sep=sep, direction='parallel')
-        dxy_ddec = self.gradient(ra, dec, sep=sep, direction='meridian')
+        dxy_dra= self.gradient(lon, lat, sep=sep, direction='parallel')
+        dxy_ddec = self.gradient(lon, lat, sep=sep, direction='meridian')
         return np.dstack((dxy_dra, dxy_ddec))
 
-    def distortion(self, ra, dec):
+    def distortion(self, lon, lat):
         """Compute semi-major and semi-minor axis according to Tissot's indicatrix
 
         See Snyder (1987, section 4)
 
         Args:
-            ra: (list of) rectascension
-            dec: (list of) declination
+            lon: (list of) longitude
+            lat: (list of) latitude
 
         Returns:
-            a, b for every item in `ra/dec`
+            a, b for every item in `lon/lat`
         """
-        jac = self.jacobian(ra,dec)
-        cos_phi = np.cos(dec * DEG2RAD)
+        jac = self.jacobian(lon,lat)
+        cos_phi = np.cos(lat * DEG2RAD)
         h = np.sqrt(jac[:,0,1]**2 + jac[:,1,1]**2)
         k = np.sqrt(jac[:,0,0]**2 + jac[:,1,0]**2) / cos_phi
         sin_t = (jac[:,1,1]*jac[:,0,0] - jac[:,0,1]*jac[:,1,0])/(h*k*cos_phi)
@@ -263,30 +283,30 @@ class BaseProjection(object):
         return a, b
 
     @classmethod
-    def optimize(cls, ra, dec, crit=meanDistortion):
-        """Optimize the parameters of projection to minimize `crit` over `ra,dec`
+    def optimize(cls, lon, lat, crit=meanDistortion):
+        """Optimize the parameters of projection to minimize `crit` over `lon,lat`
 
         Args:
-            ra: list of rectascensions
-            dec: list of declinations
+            lon: list of longitude
+            lat: list of latitude
             crit: optimization criterion
                 needs to be function of semi-major and semi-minor axes of the Tissot indicatix
 
         Returns:
             optimized projection
         """
-        ra_ = np.array(ra)
-        ra_[ra_ > 180] -= 360
-        ra_[ra_ < -180] += 360
-        ra0 = ra_.mean()
+        lon_ = np.array(lon)
+        lon_[lon_ > 180] -= 360
+        lon_[lon_ < -180] += 360
+        ra0 = lon_.mean()
         if ra0 < 0:
             ra0 += 360
         x0 = np.array((ra0,))
         bounds = ((0, 360),)
-        return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
+        return _optimize(cls, x0, lon, lat, crit, bounds=bounds)
 
     def __repr__(self):
-        return "%s(%r)" % (self.__class__.__name__, self.ra_0)
+        return "%s(%r)" % (self.__class__.__name__, self.lon_0)
 
 
 # metaclass for registration.
@@ -312,57 +332,57 @@ class Projection(with_metaclass(Meta, BaseProjection)):
 
 
 class ConicProjection(BaseProjection):
-    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+    def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
         """Base class for conic projections
 
         Args:
-            `ra_0`: RA that maps onto x = 0
-            `dec_0`: Dec that maps onto y = 0
-            `dec_1`: lower standard parallel
-            `dec_2`: upper standard parallel (must not be -dec_1)
+            `lon_0`: longitude that maps onto x = 0
+            `lat_0`: latitude that maps onto y = 0
+            `lat_1`: lower standard parallel
+            `lat_2`: upper standard parallel (must not be -lat_1)
         """
-        self.ra_0 = ra_0
-        self.dec_0 = dec_0
-        self.dec_1 = dec_1
-        self.dec_2 = dec_2
-        if dec_1 > dec_2:
-            self.dec_1, self.dec_2 = self.dec_2, self.dec_1
+        super(ConicProjection, self).__init__(lon_0, lon_type)
+        self.lat_0 = lat_0
+        self.lat_1 = lat_1
+        self.lat_2 = lat_2
+        if lat_1 > lat_2:
+            self.lat_1, self.lat_2 = self.lat_2, self.lat_1
 
     @classmethod
-    def optimize(cls, ra, dec, crit=meanDistortion):
-        """Optimize the parameters of projection to minimize `crit` over `ra,dec`
+    def optimize(cls, lon, lat, crit=meanDistortion):
+        """Optimize the parameters of projection to minimize `crit` over `lon,lat`
 
-        Uses median Dec and declination-weighted RA as reference, and places
-        standard parallels 1/6 inwards from the min/max declination
+        Uses median latitude and latitude-weighted longitude as reference,
+        and places standard parallels 1/6 inwards from the min/max latitude
         to minimize scale variations (Snyder 1987, section 14).
         """
-        # for conics: need to determine central ra, dec plus two standard parallels
-        # normalize ra
-        ra_ = np.array(ra)
-        ra_[ra_ > 180] -= 360
-        ra_[ra_ < -180] += 360
+        # for conics: need to determine central lon, lat plus two standard parallels
+        # normalize lon
+        lon_ = np.array(lon)
+        lon_[lon_ > 180] -= 360
+        lon_[lon_ < -180] += 360
         # weigh more towards the poles because that decreases distortions
-        ra0 = (ra_ * dec).sum() / dec.sum()
-        if ra0 < 0:
-            ra0 += 360
-        dec0 = np.median(dec)
+        lon0 = (lon_ * lat).sum() / lat.sum()
+        if lon0 < 0:
+            lon0 += 360
+        lat0 = np.median(lat)
 
         # determine standard parallels
-        dec1, dec2 = dec.min(), dec.max()
-        delta_dec = (dec0 - dec1, dec2 - dec0)
-        dec1 += delta_dec[0]/6
-        dec2 -= delta_dec[1]/6
+        lat1, lat2 = lat.min(), lat.max()
+        delta_lat = (lat0 - lat1, lat2 - lat0)
+        lat1 += delta_lat[0]/6
+        lat2 -= delta_lat[1]/6
 
-        x0 = np.array((ra0, dec0, dec1, dec2))
+        x0 = np.array((lon0, lat0, lat1, lat2))
         bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
-        return _optimize(cls, x0, ra, dec, crit, bounds=bounds)
+        return _optimize(cls, x0, lon, lat, crit, bounds=bounds)
 
     def __repr__(self):
-        return "%s(%r,%r,%r,%r)" % (self.__class__.__name__, self.ra_0, self.dec_0, self.dec_1, self.dec_2)
+        return "%s(%r,%r,%r,%r)" % (self.__class__.__name__, self.lon_0, self.lat_0, self.lat_1, self.lat_2)
 
 
 class Albers(ConicProjection, Projection):
-    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+    def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
         """Albers Equal-Area conic projection
 
         AEA is a conic projection with an origin along the lines connecting
@@ -380,43 +400,43 @@ class Albers(ConicProjection, Projection):
         For details, see Snyder (1987, section 14).
 
         Args:
-            ra_0: RA that maps onto x = 0
-            dec_0: Dec that maps onto y = 0
-            dec_1: lower standard parallel
-            dec_2: upper standard parallel (must not be -dec_1)
+            lon_0: longitude that maps onto x = 0
+            lat_0: latitude that maps onto y = 0
+            lat_1: lower standard parallel
+            lat_2: upper standard parallel (must not be -lat_1)
         """
-        super(Albers, self).__init__(ra_0, dec_0, dec_1, dec_2)
+        super(Albers, self).__init__(lon_0, lat_0, lat_1, lat_2, lon_type=lon_type)
 
         # Snyder 1987, eq. 14-3 to 14-6.
-        self.n = (np.sin(dec_1 * DEG2RAD) + np.sin(dec_2 * DEG2RAD)) / 2
-        self.C = np.cos(dec_1 * DEG2RAD)**2 + 2 * self.n * np.sin(dec_1 * DEG2RAD)
-        self.rho_0 = self._rho(dec_0)
+        self.n = (np.sin(lat_1 * DEG2RAD) + np.sin(lat_2 * DEG2RAD)) / 2
+        self.C = np.cos(lat_1 * DEG2RAD)**2 + 2 * self.n * np.sin(lat_1 * DEG2RAD)
+        self.rho_0 = self._rho(lat_0)
 
-    def _rho(self, dec):
-        return np.sqrt(self.C - 2 * self.n * np.sin(dec * DEG2RAD)) / self.n
+    def _rho(self, lat):
+        return np.sqrt(self.C - 2 * self.n * np.sin(lat * DEG2RAD)) / self.n
 
-    def transform(self, ra, dec):
-        ra_ = self._wrapRA(ra)
+    def transform(self, lon, lat):
+        lon_ = self._standardize(lon)
         # Snyder 1987, eq 14-1 to 14-4
-        theta = self.n * ra_
-        rho = self._rho(dec)
+        theta = self.n * lon_
+        rho = self._rho(lat)
         return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
     def invert(self, x, y):
-        # ra/dec actually x/y
+        # lon/lat actually x/y
         # Snyder 1987, eq 14-8 to 14-11
         rho = np.sqrt(x**2 + (self.rho_0 - y)**2)
         if self.n >= 0:
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        ra = self._unwrapRA(theta/self.n)
-        dec = np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(theta/self.n)
+        lat = np.arcsin((self.C - (rho * self.n)**2)/(2*self.n)) / DEG2RAD
+        return lon, lat
 
 
 class LambertConformal(ConicProjection, Projection):
-    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+    def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
         """Lambert Conformal conic projection
 
         LCC is a conic projection with an origin along the lines connecting
@@ -434,21 +454,21 @@ class LambertConformal(ConicProjection, Projection):
         For details, see Snyder (1987, section 15).
 
         Args:
-            ra_0: RA that maps onto x = 0
-            dec_0: Dec that maps onto y = 0
-            dec_1: lower standard parallel
-            dec_2: upper standard parallel (must not be -dec_1)
+            lon_0: longitude that maps onto x = 0
+            lat_0: latitude that maps onto y = 0
+            lat_1: lower standard parallel
+            lat_2: upper standard parallel (must not be -lat_1)
         """
-        super(LambertConformal, self).__init__(ra_0, dec_0, dec_1, dec_2)
+        super(LambertConformal, self).__init__(lon_0, lat_0, lat_1, lat_2, lon_type=lon_type)
 
         # Snyder 1987, eq. 14-1, 14-2 and 15-1 to 15-3.
         self.dec_max = 89.999
-        dec_1 *= DEG2RAD
-        dec_2 *= DEG2RAD
-        self.n = np.log(np.cos(dec_1)/np.cos(dec_2)) / \
-        (np.log(np.tan(np.pi/4 + dec_2/2)/np.tan(np.pi/4 + dec_1/2)))
-        self.F = np.cos(dec_1)*(np.tan(np.pi/4 + dec_1/2)**self.n)/self.n
-        self.rho_0 = self._rho(dec_0)
+        lat_1 *= DEG2RAD
+        lat_2 *= DEG2RAD
+        self.n = np.log(np.cos(lat_1)/np.cos(lat_2)) / \
+        (np.log(np.tan(np.pi/4 + lat_2/2)/np.tan(np.pi/4 + lat_1/2)))
+        self.F = np.cos(lat_1)*(np.tan(np.pi/4 + lat_1/2)**self.n)/self.n
+        self.rho_0 = self._rho(lat_0)
 
     @property
     def poleIsPoint(self):
@@ -460,17 +480,17 @@ class LambertConformal(ConicProjection, Projection):
             self._poleIsPoint[-90] = True
         return self._poleIsPoint
 
-    def _rho(self, dec):
-        # check that dec is inside of -dec_max .. dec_max
-        dec_ = np.array([dec], dtype='f8')
-        dec_[dec_ < -self.dec_max] = -self.dec_max
-        dec_[dec_ > self.dec_max] = self.dec_max
-        return self.F / np.tan(np.pi/4 + dec_[0]/2 * DEG2RAD)**self.n
+    def _rho(self, lat):
+        # check that lat is inside of -dec_max .. dec_max
+        lat_ = np.array([lat], dtype='f8')
+        lat_[lat_ < -self.dec_max] = -self.dec_max
+        lat_[lat_ > self.dec_max] = self.dec_max
+        return self.F / np.tan(np.pi/4 + lat_[0]/2 * DEG2RAD)**self.n
 
-    def transform(self, ra, dec):
-        ra_ = self._wrapRA(ra)
-        theta = self.n * ra_
-        rho = self._rho(dec)
+    def transform(self, lon, lat):
+        lon_ = self._standardize(lon)
+        theta = self.n * lon_
+        rho = self._rho(lat)
         return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
     def invert(self, x, y):
@@ -479,13 +499,13 @@ class LambertConformal(ConicProjection, Projection):
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        ra = self._unwrapRA(theta/self.n)
-        dec = (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(theta/self.n)
+        lat = (2 * np.arctan((self.F/rho)**(1./self.n)) - np.pi/2) / DEG2RAD
+        return lon, lat
 
 
 class Equidistant(ConicProjection, Projection):
-    def __init__(self, ra_0, dec_0, dec_1, dec_2):
+    def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
         """Equidistant conic projection
 
         Equistant conic is a projection with an origin along the lines connecting
@@ -501,26 +521,26 @@ class Equidistant(ConicProjection, Projection):
         For details, see Snyder (1987, section 16).
 
         Args:
-            ra_0: RA that maps onto x = 0
-            dec_0: Dec that maps onto y = 0
-            dec_1: lower standard parallel
-            dec_2: upper standard parallel (must not be +-dec_1)
+            lon_0: longitude that maps onto x = 0
+            lat_0: latitude that maps onto y = 0
+            lat_1: lower standard parallel
+            lat_2: upper standard parallel (must not be +-lat_1)
         """
-        super(Equidistant, self).__init__(ra_0, dec_0, dec_1, dec_2)
+        super(Equidistant, self).__init__(lon_0, lat_0, lat_1, lat_2, lon_type=lon_type)
 
         # Snyder 1987, eq. 14-3 to 14-6.
-        self.n = (np.cos(dec_1 * DEG2RAD) - np.cos(dec_2 * DEG2RAD)) / (dec_2  - dec_1) / DEG2RAD
-        self.G = np.cos(dec_1 * DEG2RAD)/self.n + (dec_1 * DEG2RAD)
-        self.rho_0 = self._rho(dec_0)
+        self.n = (np.cos(lat_1 * DEG2RAD) - np.cos(lat_2 * DEG2RAD)) / (lat_2  - lat_1) / DEG2RAD
+        self.G = np.cos(lat_1 * DEG2RAD)/self.n + (lat_1 * DEG2RAD)
+        self.rho_0 = self._rho(lat_0)
 
-    def _rho(self, dec):
-        return self.G - (dec * DEG2RAD)
+    def _rho(self, lat):
+        return self.G - (lat * DEG2RAD)
 
-    def transform(self, ra, dec):
-        ra_ = self._wrapRA(ra)
+    def transform(self, lon, lat):
+        lon_ = self._standardize(lon)
         # Snyder 1987, eq 16-1 to 16-4
-        theta = self.n * ra_
-        rho = self._rho(dec)
+        theta = self.n * lon_
+        rho = self._rho(lat)
         return rho*np.sin(theta * DEG2RAD), self.rho_0 - rho*np.cos(theta * DEG2RAD)
 
     def invert(self, x, y):
@@ -530,13 +550,13 @@ class Equidistant(ConicProjection, Projection):
             theta = np.arctan2(x, self.rho_0 - y) / DEG2RAD
         else:
             theta = np.arctan2(-x, -(self.rho_0 - y)) / DEG2RAD
-        ra = self._unwrapRA(theta/self.n)
-        dec = (self.G - rho)/ DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(theta/self.n)
+        lat = (self.G - rho)/ DEG2RAD
+        return lon, lat
 
 
 class Hammer(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """Hammer projection
 
         Hammer's 2:1 ellipse modification of the Lambert azimuthal equal-area
@@ -544,64 +564,64 @@ class Hammer(Projection):
 
         Its preferred use is for all-sky maps with an emphasis on low latitudes.
         It reduces the distortion at the outer meridians and has an elliptical
-        outline. The only free parameter is the reference RA `ra_0`.
+        outline. The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1987, section 24).
         """
-        self.ra_0 = ra_0
+        super(Hammer, self).__init__(lon_0, lon_type)
 
-    def transform(self, ra, dec):
-        ra_ = self._wrapRA(ra)
-        x = 2*np.sqrt(2)*np.cos(dec * DEG2RAD) * np.sin(ra_/2 * DEG2RAD)
-        y = np.sqrt(2)*np.sin(dec * DEG2RAD)
-        denom = np.sqrt(1+ np.cos(dec * DEG2RAD) * np.cos(ra_/2 * DEG2RAD))
+    def transform(self, lon, lat):
+        lon_ = self._standardize(lon)
+        x = 2*np.sqrt(2)*np.cos(lat * DEG2RAD) * np.sin(lon_/2 * DEG2RAD)
+        y = np.sqrt(2)*np.sin(lat * DEG2RAD)
+        denom = np.sqrt(1+ np.cos(lat * DEG2RAD) * np.cos(lon_/2 * DEG2RAD))
         return x/denom, y/denom
 
     def invert(self, x, y):
         dz = x*x/16 + y*y/4
         z = np.sqrt(1- dz)
-        dec = np.arcsin(z*y) / DEG2RAD
-        ra = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
-        ra = self._unwrapRA(ra)
-        return ra, dec
+        lat = np.arcsin(z*y) / DEG2RAD
+        lon = 2*np.arctan(z*x / (2*(2*z*z - 1))) / DEG2RAD
+        lon = self._unstandardize(lon)
+        return lon, lat
 
 
 class Mollweide(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """Mollweide projection
 
         Mollweide elliptical equal-area projection. It is used for all-sky maps,
         but it introduces strong distortions at the outer meridians.
-        The only free parameter is the reference RA `ra_0`.
+        The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1987, section 31).
         """
-        self.ra_0 = ra_0
+        super(Mollweide, self).__init__(lon_0, lon_type)
         self.sqrt2 = np.sqrt(2)
 
-    def transform(self, ra, dec):
+    def transform(self, lon, lat):
         # Snyder p. 251
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        theta_ = self.theta(dec_)
-        x = 2*self.sqrt2 / np.pi * (ra_ * DEG2RAD) * np.cos(theta_)
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        theta_ = self.theta(lat_)
+        x = 2*self.sqrt2 / np.pi * (lon_ * DEG2RAD) * np.cos(theta_)
         y = self.sqrt2 * np.sin(theta_)
         if isArray:
             return x, y
         else:
             return x[0], y[0]
 
-    def theta(self, dec, eps=1e-6, maxiter=100):
+    def theta(self, lat, eps=1e-6, maxiter=100):
         # Snyder 1987 p. 251
         # Newon scheme to solve for theta given phi (=Dec)
-        dec_ = dec * DEG2RAD
-        t0 = dec_
-        mask = np.abs(dec_) < np.pi/2
+        lat_ = lat * DEG2RAD
+        t0 = lat_
+        mask = np.abs(lat_) < np.pi/2
         if mask.any():
             t = t0[mask]
             for it in range(maxiter):
-                f = 2*t + np.sin(2*t) - np.pi*np.sin(dec_[mask])
+                f = 2*t + np.sin(2*t) - np.pi*np.sin(lat_[mask])
                 fprime = 2 + 2*np.cos(2*t)
                 t_ = t - f / fprime
                 if (np.abs(t - t_) < eps).all():
@@ -613,30 +633,30 @@ class Mollweide(Projection):
 
     def invert(self, x, y):
         theta_ = np.arcsin(y/self.sqrt2)
-        ra = self._unwrapRA(np.pi*x/(2*self.sqrt2*np.cos(theta_)) / DEG2RAD)
-        dec = np.arcsin((2*theta_ + np.sin(2*theta_))/np.pi) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(np.pi*x/(2*self.sqrt2*np.cos(theta_)) / DEG2RAD)
+        lat = np.arcsin((2*theta_ + np.sin(2*theta_))/np.pi) / DEG2RAD
+        return lon, lat
 
 
 class EckertIV(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """Eckert IV projection
 
         Eckert's IV equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `ra_0`.
+        The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1987, section 32).
         """
-        self.ra_0 = ra_0
+        super(EckertIV, self).__init__(lon_0, lon_type)
         self.c1 = 2 / np.sqrt(4*np.pi + np.pi**2)
         self.c2 = 2 * np.sqrt(1/(4/np.pi + 1))
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        t = self.theta(dec_)
-        x = self.c1 * ra_ *DEG2RAD * (1 + np.cos(t))
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        t = self.theta(lat_)
+        x = self.c1 * lon_ *DEG2RAD * (1 + np.cos(t))
         y = self.c2 * np.sin(t)
         if isArray:
             return x, y
@@ -645,17 +665,17 @@ class EckertIV(Projection):
 
     def invert(self, x, y):
         t = np.arcsin(y / self.c2)
-        ra = self._unwrapRA(x / (1+np.cos(t)) / self.c1 / DEG2RAD)
-        dec = np.arcsin(y / self.c2) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(x / (1+np.cos(t)) / self.c1 / DEG2RAD)
+        lat = np.arcsin(y / self.c2) / DEG2RAD
+        return lon, lat
 
-    def theta(self, dec, eps=1e-6, maxiter=100):
+    def theta(self, lat, eps=1e-6, maxiter=100):
         # Snyder 1993 p. 195
         # Newon scheme to solve for theta given phi (=Dec)
-        dec_ = dec * DEG2RAD
-        t = dec_
+        lat_ = lat * DEG2RAD
+        t = lat_
         for it in range(maxiter):
-            f = t + np.sin(t)*np.cos(t) + 2*np.sin(t) - (2+np.pi/2)*np.sin(dec_)
+            f = t + np.sin(t)*np.cos(t) + 2*np.sin(t) - (2+np.pi/2)*np.sin(lat_)
             fprime = 1 + np.cos(t)**2 - np.sin(t)**2 + 2*np.cos(t)
             t_ = t - f / fprime
             if (np.abs(t - t_) < eps).all():
@@ -666,25 +686,25 @@ class EckertIV(Projection):
 
 
 class WagnerI(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """Wagner I projection
 
         Wagners's I equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `ra_0`.
+        The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1993, p. 204).
         """
-        self.ra_0 = ra_0
+        super(WagnerI, self).__init__(lon_0, lon_type)
         self.c1 = 2 / 3**0.75
         self.c2 = 3**0.25
         self.c3 = np.sqrt(3)/2
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        t = np.arcsin(self.c3*np.sin(dec_ * DEG2RAD))
-        x = self.c1 * ra_ *DEG2RAD * np.cos(t)
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        t = np.arcsin(self.c3*np.sin(lat_ * DEG2RAD))
+        x = self.c1 * lon_ *DEG2RAD * np.cos(t)
         y = self.c2 * t
         if isArray:
             return x, y
@@ -693,31 +713,31 @@ class WagnerI(Projection):
 
     def invert(self, x, y):
         t = y / self.c2
-        ra = self._unwrapRA(x / np.cos(t) / self.c1 / DEG2RAD)
-        dec = np.arcsin(np.sin(t) / self.c3) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(x / np.cos(t) / self.c1 / DEG2RAD)
+        lat = np.arcsin(np.sin(t) / self.c3) / DEG2RAD
+        return lon, lat
 
 
 class WagnerIV(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """Wagner IV projection
 
         Wagner's IV equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `ra_0`.
+        The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1993, p. 204).
         """
-        self.ra_0 = ra_0
+        super(WagnerIV, self).__init__(lon_0, lon_type)
         self.c1 = 0.86310
         self.c2 = 1.56548
         self.c3 = (4*np.pi + 3*np.sqrt(3)) / 6
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        t = self.theta(dec_)
-        x = self.c1 * ra_ * DEG2RAD * np.cos(t)
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        t = self.theta(lat_)
+        x = self.c1 * lon_ * DEG2RAD * np.cos(t)
         y = self.c2 * np.sin(t)
         if isArray:
             return x, y
@@ -726,19 +746,19 @@ class WagnerIV(Projection):
 
     def invert(self, x, y):
         t = np.arcsin(y / self.c2)
-        ra = self._unwrapRA(x / np.cos(t) / self.c1 / DEG2RAD)
-        dec = np.arcsin(y / self.c2) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(x / np.cos(t) / self.c1 / DEG2RAD)
+        lat = np.arcsin(y / self.c2) / DEG2RAD
+        return lon, lat
 
-    def theta(self, dec, eps=1e-6, maxiter=100):
+    def theta(self, lat, eps=1e-6, maxiter=100):
         # Newon scheme to solve for theta given phi (=Dec)
-        dec_ = dec * DEG2RAD
-        t0 = np.zeros(dec_.shape)
-        mask = np.abs(dec_) < np.pi/2
+        lat_ = lat * DEG2RAD
+        t0 = np.zeros(lat_.shape)
+        mask = np.abs(lat_) < np.pi/2
         if mask.any():
             t = t0[mask]
             for it in range(maxiter):
-                f = 2*t + np.sin(2*t) - self.c3*np.sin(dec_[mask])
+                f = 2*t + np.sin(2*t) - self.c3*np.sin(lat_[mask])
                 fprime = 2 + 2*np.cos(2*t)
                 t_ = t - f / fprime
                 if (np.abs(t - t_) < eps).all():
@@ -746,31 +766,31 @@ class WagnerIV(Projection):
                     break
                 t = t_
             t0[mask] = t
-        t0[~mask] = np.sign(dec[~mask]) * np.pi/3 # maximum value
+        t0[~mask] = np.sign(lat[~mask]) * np.pi/3 # maximum value
         return t0
 
 
 class WagnerVII(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """Wagner VII projection
 
         WagnerVII equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `ra_0`.
+        The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1993, p. 237).
         """
-        self.ra_0 = ra_0
+        super(WagnerVII, self).__init__(lon_0, lon_type)
         self.c1 = 2.66723
         self.c2 = 1.24104
         self.c3 = np.sin(65 * DEG2RAD)
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        theta = np.arcsin(self.c3 * np.sin(dec_ * DEG2RAD))
-        alpha = np.arccos(np.cos(theta)*np.cos(ra_ * DEG2RAD/3))
-        x = self.c1 * np.cos(theta) * np.sin(ra_ * DEG2RAD / 3) / np.cos(alpha/2)
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        theta = np.arcsin(self.c3 * np.sin(lat_ * DEG2RAD))
+        alpha = np.arccos(np.cos(theta)*np.cos(lon_ * DEG2RAD/3))
+        x = self.c1 * np.cos(theta) * np.sin(lon_ * DEG2RAD / 3) / np.cos(alpha/2)
         y = self.c2 * np.sin(theta) / np.cos(alpha/2)
         if isArray:
             return x, y
@@ -779,25 +799,25 @@ class WagnerVII(Projection):
 
 
 class McBrydeThomasFPQ(Projection):
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         """McBryde-Thomas Flat-Polar Quartic projection
 
         McBrydeThomasFPQ equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `ra_0`.
+        The only free parameter is the reference RA `lon_0`.
 
         For details, see Snyder (1993, p. 211).
         """
-        self.ra_0 = ra_0
+        super(McBrydeThomasFPQ, self).__init__(lon_0, lon_type)
         self.c1 = 1 / np.sqrt(3*np.sqrt(2) + 6)
         self.c2 = 2 * np.sqrt(3 / (2 + np.sqrt(2)))
         self.c3 = 1 + np.sqrt(2) / 2
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        t = self.theta(dec_)
-        x = self.c1 * ra_ * DEG2RAD * (1 + 2*np.cos(t)/np.cos(t/2))
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        t = self.theta(lat_)
+        x = self.c1 * lon_ * DEG2RAD * (1 + 2*np.cos(t)/np.cos(t/2))
         y = self.c2 * np.sin(t/2)
         if isArray:
             return x, y
@@ -806,16 +826,16 @@ class McBrydeThomasFPQ(Projection):
 
     def invert(self, x, y):
         t = 2*np.arcsin(y / self.c2)
-        ra = self._unwrapRA(x / (1 + 2*np.cos(t)/np.cos(t/2)) / self.c1 / DEG2RAD)
-        dec = np.arcsin((np.sin(t/2) + np.sin(t))/ self.c3) / DEG2RAD
-        return ra, dec
+        lon = self._unstandardize(x / (1 + 2*np.cos(t)/np.cos(t/2)) / self.c1 / DEG2RAD)
+        lat = np.arcsin((np.sin(t/2) + np.sin(t))/ self.c3) / DEG2RAD
+        return lon, lat
 
-    def theta(self, dec, eps=1e-6, maxiter=100):
+    def theta(self, lat, eps=1e-6, maxiter=100):
         # Newon scheme to solve for theta given phi (=Dec)
-        dec_ = dec * DEG2RAD
-        t = dec_
+        lat_ = lat * DEG2RAD
+        t = lat_
         for it in range(maxiter):
-            f = np.sin(t/2) + np.sin(t) - self.c3*np.sin(dec_)
+            f = np.sin(t/2) + np.sin(t) - self.c3*np.sin(lat_)
             fprime = np.cos(t/2)/2 + np.cos(t)
             t_ = t - f / fprime
             if (np.abs(t - t_) < eps).all():
@@ -826,7 +846,7 @@ class McBrydeThomasFPQ(Projection):
 
 
 class HyperElliptical(Projection):
-    def __init__(self, ra_0, alpha, k, gamma):
+    def __init__(self, lon_0, alpha, k, gamma, lon_type="ra"):
         """Hyperelliptical projections.
 
         The outline of the map follows the equation
@@ -839,20 +859,20 @@ class HyperElliptical(Projection):
 
         See Snyder (1993, p. 220) for details.
         """
-        self.ra_0 = ra_0
+        super(HyperElliptical, self).__init__(lon_0, lon_type)
         self.alpha = alpha
         self.k = k
         self.gamma = gamma
         self.gamma_pow_k = np.abs(gamma)**k
         self.affine = np.sqrt(2 * self.gamma / np.pi)
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
-        y = self.Y(np.sin(np.abs(dec_ * DEG2RAD)))
-        x = ra_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) * self.affine
-        y *= np.sign(dec_) / self.affine
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
+        y = self.Y(np.sin(np.abs(lat_ * DEG2RAD)))
+        x = lon_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) * self.affine
+        y *= np.sign(lat_) / self.affine
         if isArray:
             return x, y
         else:
@@ -861,15 +881,15 @@ class HyperElliptical(Projection):
     def invert(self, x, y):
         y_, isArray = _toArray(y * self.affine)
         sinphi = self.sinPhiDiff(y_, 0)
-        dec = np.sign(y) * np.arcsin(sinphi) / DEG2RAD
+        lat = np.sign(y) * np.arcsin(sinphi) / DEG2RAD
 
         x_, isArray = _toArray(x)
-        ra = x_ / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
-        ra = self._unwrapRA(ra)
+        lon = x_ / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
+        lon = self._unstandardize(lon)
         if isArray:
-            return  ra, dec
+            return  lon, lat
         else:
-            return  ra[0], dec[0]
+            return  lon[0], lat[0]
 
     def elliptic(self, y):
         """Returns (gamma^k - y^k)^1/k
@@ -937,9 +957,9 @@ class Tobler(HyperElliptical):
 
     See Snyder (1993, p. 220) for details.
     """
-    def __init__(self, ra_0):
+    def __init__(self, lon_0=0, lon_type="ra"):
         alpha, k, gamma = 0., 2.5, 1.183136
-        super(Tobler, self).__init__(ra_0, alpha, k, gamma)
+        super(Tobler, self).__init__(lon_0, alpha, k, gamma, lon_type=lon_type)
 
 
 class EqualEarth(Projection):
@@ -950,23 +970,23 @@ class EqualEarth(Projection):
 
     See https://doi.org/10.1080/13658816.2018.1504949 for details.
     """
-    def __init__(self, ra_0):
-        self.ra_0 = ra_0
+    def __init__(self, lon_0=0, lon_type="ra"):
+        super(EqualEarth, self).__init__(lon_0, lon_type)
         self.A1 = 1.340264
         self.A2 = -0.081106
         self.A3 = 0.000893
         self.A4 = 0.003796
         self.sqrt3 = np.sqrt(3)
 
-    def transform(self, ra, dec):
-        ra_, isArray = _toArray(ra)
-        dec_, isArray = _toArray(dec)
-        ra_ = self._wrapRA(ra_)
+    def transform(self, lon, lat):
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        lon_ = self._standardize(lon_)
 
-        t = np.arcsin(self.sqrt3/2 * np.sin(dec_ * DEG2RAD))
+        t = np.arcsin(self.sqrt3/2 * np.sin(lat_ * DEG2RAD))
         t2 = t*t
         t6 = t2*t2*t2
-        x = 2/3*self.sqrt3 * ra_ * DEG2RAD * np.cos(t) / (self.A1 + 3*self.A2*t2 + t6*(7*self.A3 + 9*self.A4*t2))
+        x = 2/3*self.sqrt3 * lon_ * DEG2RAD * np.cos(t) / (self.A1 + 3*self.A2*t2 + t6*(7*self.A3 + 9*self.A4*t2))
         y = t*(self.A1 + self.A2*t2 + t6*(self.A3 + self.A4*t2))
 
         if isArray:
