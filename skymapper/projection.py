@@ -11,7 +11,7 @@ def _toArray(x):
         array(x), boolean if x was an array before
     """
     if isinstance(x, np.ndarray):
-        return x, True
+        return np.copy(x), True
     if hasattr(x, '__iter__'):
         return np.array(x), True
     return np.array([x]), False
@@ -171,7 +171,7 @@ class BaseProjection(object):
         """Normalize longitude to -180 .. 180, with reference `lon_0` at 0"""
         lon_, isArray = _toArray(lon)
         lon_ -= self.lon_0
-        if self.lon_type == "lon":
+        if self.lon_type == "ra":
             lon_ *= -1 # left-handed
         # check that lon_ is between -180 and 180 deg
         lon_[lon_ < -180 ] += 360
@@ -183,7 +183,7 @@ class BaseProjection(object):
     def _unstandardize(self, lon):
         """Revert `_standardize`"""
         lon_, isArray = _toArray(lon)
-        if self.lon_type == "lon":
+        if self.lon_type == "ra":
             lon_ *= -1 # left-handed
         lon_ += self.lon_0
         lon_ [lon_ < 0] += 360

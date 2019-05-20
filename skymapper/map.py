@@ -38,7 +38,7 @@ def extrap(x, xp, yp):
     return y
 
 def degFormatter(deg):
-    """Default formatter for map labels.
+    """Formats degrees as X˚
 
     Args:
         deg: float
@@ -48,7 +48,7 @@ def degFormatter(deg):
     return "${:d}^\circ$".format(int(deg))
 
 def degPMFormatter(deg):
-    """String formatter for "+-%d^\circ"
+    """Formats degrees as [+-]X˚
 
     Args:
         deg: float
@@ -56,11 +56,12 @@ def degPMFormatter(deg):
     Return:
         String
     """
-
+    if deg == 0:
+        return degFormatter(deg)
     return "${:+d}^\circ$".format(int(deg))
 
 def deg360Formatter(deg):
-        """Default formatter for map labels.
+        """Formats degrees as X˚ with X in [0..360]
 
         Args:
             deg: float
@@ -70,6 +71,20 @@ def deg360Formatter(deg):
         if deg < 0:
             deg += 360
         return degFormatter(deg)
+
+def deg180Formatter(deg):
+        """Formats degrees as X˚ with X in [-180..180]
+
+        Args:
+            deg: float
+        Returns:
+            string
+        """
+        if deg < -180:
+            deg += 360
+        if deg > 180:
+            deg -= 360
+        return degPMFormatter(deg)
 
 def hourAngleFormatter(ra):
     """String formatter for "hh:mm"
@@ -87,6 +102,28 @@ def hourAngleFormatter(ra):
     if minutes:
         return "${:d}^{{{:>02}}}$h".format(hours, minutes)
     return "${:d}$h".format(hours)
+
+def degEastWestFormatter(deg):
+        """Formats degrees as X˚D with X in [0..180] and D in ['E','W']
+
+        Args:
+            deg: float
+        Returns:
+            string
+        """
+        if deg < -180:
+            deg += 360
+        if deg > 180:
+            deg -= 360
+
+        d = ''
+        if deg > 0:
+            d = 'E'
+        if deg < 0:
+            deg *= -1
+            d = 'W'
+        return degFormatter(deg) + d
+
 
 def _parseArgs(locals):
     """Turn list of arguments (all named or kwargs) into flat dictionary"""
@@ -259,13 +296,13 @@ class Map():
 
     def _getParallel(self, p, reverse=False):
         if not reverse:
-            return self.proj.transform(self._ra_range, p*np.ones(len(self._ra_range)))
-        return self.proj.transform(self._ra_range[::-1], p*np.ones(len(self._ra_range)))
+            return self.proj.transform(self._lon_range, p*np.ones(len(self._lon_range)))
+        return self.proj.transform(self._lon_range[::-1], p*np.ones(len(self._lon_range)))
 
     def _getMeridian(self, m, reverse=False):
         if not reverse:
-            return self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range)
-        return self.proj.transform(m*np.ones(len(self._dec_range)), self._dec_range[::-1])
+            return self.proj.transform(m*np.ones(len(self._lat_range)), self._lat_range)
+        return self.proj.transform(m*np.ones(len(self._lat_range)), self._lat_range[::-1])
 
     def _setParallel(self, p, **kwargs):
         x, y = self._getParallel(p)
@@ -280,8 +317,8 @@ class Map():
         return artist
 
     def _setEdge(self, **kwargs):
-        self._dec_range = np.linspace(-90, 90, self._resolution)
-        self._ra_range = np.linspace(-180, 180, self._resolution) + self.proj.ra_0
+        self._lat_range = np.linspace(-90, 90, self._resolution)
+        self._lon_range = np.linspace(-180, 180, self._resolution) + self.proj.lon_0
 
         # styling: frame needs to be on top of everything, must be transparent
         facecolor = 'None'
@@ -293,7 +330,7 @@ class Map():
 
         # polygon of the map edge: top, left, bottom, right
         # don't draw poles if that's a single point
-        lines = [self._getMeridian(self.proj.ra_0 + 180, reverse=True), self._getMeridian(self.proj.ra_0 - 180)]
+        lines = [self._getMeridian(self._lon_range[-1], reverse=True), self._getMeridian(self._lon_range[0], reverse=False)]
         if not self.proj.poleIsPoint[-90]:
             lines.insert(1, self._getParallel(-90, reverse=True))
         if not self.proj.poleIsPoint[90]:
@@ -328,7 +365,7 @@ class Map():
             self.ax.set_ylim(bottom=bottom, top=top, **kw)
             self._resetFrame()
 
-    def grid(self, sep=30, parallel_fmt=degPMFormatter, meridian_fmt=deg360Formatter, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+    def grid(self, sep=30, parallel_fmt=None, meridian_fmt=None, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
         """Set map grid / graticules
 
         Args:
@@ -341,14 +378,21 @@ class Map():
             ra_max: maximum declination for graticules (for which reference RA=0)
             **kwargs: styling of `matplotlib.lines.Line2D` for the graticules
         """
+        if parallel_fmt is None:
+            parallel_fmt = degPMFormatter
+        if meridian_fmt is None:
+            if self.proj.lon_type == "ra":
+                meridian_fmt = deg360Formatter
+            else:
+                meridian_fmt = deg180Formatter
         self._config['grid'] = _parseArgs(locals())
-        self._dec_range = np.linspace(dec_min, dec_max, self._resolution)
-        self._ra_range = np.linspace(ra_min, ra_max, self._resolution) + self.proj.ra_0
+        self._lat_range = np.linspace(dec_min, dec_max, self._resolution)
+        self._lon_range = np.linspace(ra_min, ra_max, self._resolution) + self.proj.lon_0
         _parallels = np.arange(-90+sep,90,sep)
-        if self.proj.ra_0 % sep == 0:
-            _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep - 1), sep * ((self.proj.ra_0 - 180) // sep), -sep)
+        if self.proj.lon_0 % sep == 0:
+            _meridians = np.arange(sep * ((self.proj.lon_0 + 180) // sep - 1), sep * ((self.proj.lon_0 - 180) // sep), -sep)
         else:
-            _meridians = np.arange(sep * ((self.proj.ra_0 + 180) // sep), sep * ((self.proj.ra_0 - 180) // sep), -sep)
+            _meridians = np.arange(sep * ((self.proj.lon_0 + 180) // sep), sep * ((self.proj.lon_0 - 180) // sep), -sep)
         _meridians[_meridians < 0] += 360
         _meridians[_meridians >= 360] -= 360
 
@@ -392,13 +436,13 @@ class Map():
                 if method == 'labelMeridiansAtParallel':
                     # determine the parallel that has the most space for labels
                     dec = [-90, 0, 90]
-                    ra = [self.proj.ra_0,] * 3
+                    ra = [self.proj.lon_0,] * 3
                     jac = np.sum(self.proj.gradient(ra, dec)**2, axis=1)
                     p = dec[np.argmax(jac)]
                     getattr(self, method)(p)
                 # label both outer meridians
                 else:
-                    degs = [self.proj.ra_0 + 180, self.proj.ra_0 - 180]
+                    degs = [self.proj.lon_0 + 180, self.proj.lon_0 - 180]
                     for deg in degs:
                         getattr(self, method)(deg)
 
@@ -449,7 +493,7 @@ class Map():
         # determine rot_base so that central label is upright
         rotation = kwargs.pop('rotation', None)
         if rotation is None or loc is None:
-            m = self.proj.ra_0
+            m = self.proj.lon_0
             dxy = self.proj.gradient(m, p, direction=direction)
             angle = np.arctan2(*dxy) / DEG2RAD
             options = [-90, 90]
@@ -530,7 +574,7 @@ class Map():
             rot_base = options[closest]
 
             if loc is None:
-                if m < self.proj.ra_0: # meridians on the left: dx goes in positive RA
+                if m < self.proj.lon_0: # meridians on the left: dx goes in positive RA
                     dxy *= -1
                 if dxy[0] > 0:
                     loc = 'right'
@@ -558,7 +602,7 @@ class Map():
             xp, yp = self.proj.transform(m, p)
             dxy = self.proj.gradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
-            if m < self.proj.ra_0: # meridians on the left: dx goes in positive RA
+            if m < self.proj.lon_0: # meridians on the left: dx goes in positive RA
                 dxy *= -1
 
             if rotation is None:
