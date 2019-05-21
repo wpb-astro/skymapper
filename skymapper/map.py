@@ -666,9 +666,9 @@ class Map():
                         # pick the largest meridian gradient in the middle of the frame
                         xmean = xdata.mean()
                         ylim = self.ax.get_ylim()
-                        m_bottom, p_ = self.proj.invert(xmean, ylim[0])
+                        m_bottom, p_ = self.proj.inv(xmean, ylim[0])
                         grad_bottom = np.abs(self.proj.gradient(m_bottom, p_, direction="parallel")[0])
-                        m_top, p_ = self.proj.invert(xmean, ylim[1])
+                        m_top, p_ = self.proj.inv(xmean, ylim[1])
                         grad_top = np.abs(self.proj.gradient(m_top, p_, direction="parallel")[0])
                         if grad_top > grad_bottom:
                             loc = 'top'
@@ -711,7 +711,7 @@ class Map():
                 xm, ym = c.get_xdata(), c.get_ydata()
                 xm_at_ylim = extrap(ylim, ym, xm)[pos]
                 if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.contains(xm_at_ylim, ylim[pos]):
-                    m_, p_ = self.proj.invert(xm_at_ylim, ylim[pos])
+                    m_, p_ = self.proj.inv(xm_at_ylim, ylim[pos])
                     dxy = self.proj.gradient(m_, p_, direction="meridian")
                     dxy /= np.sqrt((dxy**2).sum())
                     dxy *= pad / dxy[1] # same pad from frame
@@ -787,9 +787,9 @@ class Map():
                         # pick the largest meridian gradient in the middle of the frame
                         ymean = ydata.mean()
                         xlim = self.ax.get_xlim()
-                        m_, p_left = self.proj.invert(xlim[0], ymean)
+                        m_, p_left = self.proj.inv(xlim[0], ymean)
                         grad_left = np.abs(self.proj.gradient(m_, p_left, direction="meridian")[1])
-                        m_, p_right = self.proj.invert(xlim[1], ymean)
+                        m_, p_right = self.proj.inv(xlim[1], ymean)
                         grad_right = np.abs(self.proj.gradient(m_, p_right, direction="meridian")[1])
                         if grad_right > grad_left:
                             loc = 'right'
@@ -838,7 +838,7 @@ class Map():
                 xp, yp = c.get_xdata(), c.get_ydata()
                 yp_at_xlim = extrap(xlim, xp, yp)[pos]
                 if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.contains(xlim[pos], yp_at_xlim):
-                    m_, p_ = self.proj.invert(xlim[pos], yp_at_xlim)
+                    m_, p_ = self.proj.inv(xlim[pos], yp_at_xlim)
                     dxy = self.proj.gradient(m_, p_, direction='parallel')
                     dxy /= np.sqrt((dxy**2).sum())
                     dxy *= pad / dxy[0] # same pad from frame
@@ -1280,7 +1280,7 @@ class Map():
         inside = self.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
 
-        rap, decp = self.proj.invert(xp[inside], yp[inside])
+        rap, decp = self.proj.inv(xp[inside], yp[inside])
         vp[inside] = rbfi(rap, decp)
 
         # xp,yp whose centers aren't in the map have no values:

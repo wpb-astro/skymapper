@@ -106,6 +106,8 @@ class BaseProjection(object):
         """
         lon_, isArray = _toArray(lon)
         lat_, isArray = _toArray(lat)
+        assert len(lon_) == len(lat_)
+
         x, y = self.transform(lon_, lat_)
         if isArray:
             return x, y
@@ -126,33 +128,40 @@ class BaseProjection(object):
         """
         pass
 
+    def inv(self, x, y):
+        """Shorthand for `invert`. Works also with single coordinates
+
+        Args:
+            x (float, array): horizontal map coordinate
+            y (float, array): vertical map coordinate
+        """
+        x_, isArray = _toArray(x)
+        y_, isArray = _toArray(y)
+        lon, lat = self.invert(x_, y_)
+        if isArray:
+            return lon, lat
+        else:
+            return lon[0], lat[0]
+
     def invert(self, x, y):
         """Convert map coordinates into longitude/latitude
 
         Args:
-            x:  float or array of floats
-            y: float or array of floats
+            x (array): horizontal map coordinates
+            y (array): vertical map coordinates
 
         Returns:
             lon,lat with the same format as x,y
         """
         # default implementation for non-analytic inverses
-        if not hasattr(x, '__iter__'):
-            x_ = (x,)
-        else:
-            x_ = x
-        if not hasattr(y, '__iter__'):
-            y_ = (y,)
-        else:
-            y_ = y
-        assert len(x_) == len(y_)
+        assert len(x) == len(y)
 
         bounds = ((None,None), (-90, 90)) # lon/lat limits
         start = (self.lon_0,0) # lon/lat of initial guess: should be close to map center
-        lon, lat = np.empty(len(x_)), np.empty(len(y_))
+        lon, lat = np.empty(len(x)), np.empty(len(y))
         i = 0
-        for x__,y__ in zip(x_, y_):
-            xy = np.array([x__,y__])
+        for x_,y_ in zip(x, y):
+            xy = np.array([x_,y_])
             radec, fmin, d = scipy.optimize.fmin_l_bfgs_b(_dist, start, args=(self, xy), bounds=bounds, approx_grad=True)
             if fmin < 1e-6: # smaller than default tolerance of fmin
                 lon[i], lat[i] = radec
@@ -160,8 +169,6 @@ class BaseProjection(object):
                 lon[i], lat[i] = -1000, -1000
             i += 1
 
-        if not hasattr(x, '__iter__'):
-            return lon[0], lat[0]
         return lon, lat
 
     @property
@@ -395,7 +402,7 @@ class ConicProjection(BaseProjection):
 
         x0 = np.array((lon0, lat0, lat1, lat2))
         bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
-        return _optimize(cls, x0, lon, lat, crit, bounds=bounds, lon_type=lon_type)
+        return _optimize(cls, x0, lon_type, lon, lat, crit, bounds=bounds)
 
     def __repr__(self):
         return "%s(%r,%r,%r,%r)" % (self.__class__.__name__, self.lon_0, self.lat_0, self.lat_1, self.lat_2)
