@@ -365,17 +365,17 @@ class Map():
             self.ax.set_ylim(bottom=bottom, top=top, **kw)
             self._resetFrame()
 
-    def grid(self, sep=30, parallel_fmt=None, meridian_fmt=None, dec_min=-90, dec_max=90, ra_min=-180, ra_max=180, **kwargs):
+    def grid(self, sep=30, parallel_fmt=None, meridian_fmt=None, lat_min=-90, lat_max=90, lon_min=-180, lon_max=180, **kwargs):
         """Set map grid / graticules
 
         Args:
             sep: distance between graticules in deg
             parallel_fmt: formatter for parallel labels
             meridian_fmt: formatter for meridian labels
-            dec_min: minimum declination for graticules
-            dec_max: maximum declination for graticules
-            ra_min: minimum declination for graticules (for which reference RA=0)
-            ra_max: maximum declination for graticules (for which reference RA=0)
+            lat_min: minimum latitude for graticules
+            lat_max: maximum latitude for graticules
+            lon_min: minimum longitude for graticules
+            lon_max: maximum longitude for graticules
             **kwargs: styling of `matplotlib.lines.Line2D` for the graticules
         """
         if parallel_fmt is None:
@@ -386,8 +386,8 @@ class Map():
             else:
                 meridian_fmt = deg180Formatter
         self._config['grid'] = _parseArgs(locals())
-        self._lat_range = np.linspace(dec_min, dec_max, self._resolution)
-        self._lon_range = np.linspace(ra_min, ra_max, self._resolution) + self.proj.lon_0
+        self._lat_range = np.linspace(lat_min, lat_max, self._resolution)
+        self._lon_range = np.linspace(lon_min, lon_max, self._resolution) + self.proj.lon_0
         _parallels = np.arange(-90+sep,90,sep)
         if self.proj.lon_0 % sep == 0:
             _meridians = np.arange(sep * ((self.proj.lon_0 + 180) // sep - 1), sep * ((self.proj.lon_0 - 180) // sep), -sep)
@@ -456,7 +456,7 @@ class Map():
         if loc == "right":
             return "left"
 
-    def labelMeridiansAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', **kwargs):
+    def labelMeridiansAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', fmt=None, **kwargs):
         """Label the meridians intersecting a given parallel
 
         The method is called by `grid()` but can be used to overwrite the defaults.
@@ -467,6 +467,7 @@ class Map():
             meridians: list of meridians to label, if None labels all of them
             pad: padding of annotation, in units of fontsize
             direction: tangent of the label, from `['parallel', 'meridian']`
+            fmt: formatter for labels, if `None` use default
             **kwargs: styling of `matplotlib` annotations for the graticule labels
         """
         arguments = _parseArgs(locals())
@@ -515,6 +516,8 @@ class Map():
         color = kwargs.pop('color', self._edge.get_edgecolor())
         alpha = kwargs.pop('alpha', self._edge.get_alpha())
         zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
+        if fmt is None:
+            fmt = self._config['grid']['meridian_fmt']
 
         if pad is None:
             pad = size / 3
@@ -533,9 +536,9 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self._config['grid']['meridian_fmt'](m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
+            self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
-    def labelParallelsAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', **kwargs):
+    def labelParallelsAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', fmt=None, **kwargs):
         """Label the parallel intersecting a given meridian
 
         The method is called by `grid()` but can be used to overwrite the defaults.
@@ -546,6 +549,7 @@ class Map():
             parallel: list of parallels to label, if None labels all of them
             pad: padding of annotation, in units of fontsize
             direction: tangent of the label, from `['parallel', 'meridian']`
+            fmt: formatter for label, if `None` use default
             **kwargs: styling of `matplotlib` annotations for the graticule labels
         """
         arguments = _parseArgs(locals())
@@ -593,6 +597,8 @@ class Map():
         color = kwargs.pop('color', self._edge.get_edgecolor())
         alpha = kwargs.pop('alpha', self._edge.get_alpha())
         zorder = kwargs.pop('zorder', self._edge.get_zorder() + 1) # on top of edge
+        if fmt is None:
+            fmt = self._config['grid']['parallel_fmt']
 
         if pad is None:
             pad = size/2 # more space for horizontal parallels
@@ -611,7 +617,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(self._config['grid']['parallel_fmt'](p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
+            self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
 
     def labelMeridiansAtFrame(self, loc='auto', meridians=None, pad=None, description=None, **kwargs):
         """Label the meridians on rectangular frame of the map
