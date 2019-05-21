@@ -317,8 +317,9 @@ class Map():
         return artist
 
     def _setEdge(self, **kwargs):
-        self._lat_range = np.linspace(-90, 90, self._resolution)
-        self._lon_range = np.linspace(-180, 180, self._resolution) + self.proj.lon_0
+        self._lat_range = np.linspace(-89.9999, 89.9999, self._resolution)
+        self._lon_range = np.linspace(-179.9999, 179.9999, self._resolution) + self.proj.lon_0
+
 
         # styling: frame needs to be on top of everything, must be transparent
         facecolor = 'None'
@@ -330,11 +331,13 @@ class Map():
 
         # polygon of the map edge: top, left, bottom, right
         # don't draw poles if that's a single point
-        lines = [self._getMeridian(self._lon_range[-1], reverse=True), self._getMeridian(self._lon_range[0], reverse=False)]
-        if not self.proj.poleIsPoint[-90]:
-            lines.insert(1, self._getParallel(-90, reverse=True))
+        lines = []
         if not self.proj.poleIsPoint[90]:
-            lines.insert(0, self._getParallel(90))
+            lines.append(self._getParallel(90))
+        lines.append(self._getMeridian(self._lon_range[-1], reverse=True))
+        if not self.proj.poleIsPoint[-90]:
+            lines.append(self._getParallel(-90, reverse=True))
+        lines.append(self._getMeridian(self._lon_range[0]))
         xy = np.concatenate(lines, axis=1).T
         self._edge = Polygon(xy, closed=True, edgecolor=edgecolor, facecolor=facecolor, lw=lw, zorder=zorder,gid="edge", **kwargs)
         self.ax.add_patch(self._edge)

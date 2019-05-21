@@ -10,11 +10,9 @@ def _toArray(x):
     Returns:
         array(x), boolean if x was an array before
     """
-    if isinstance(x, np.ndarray):
-        return np.copy(x), True
     if hasattr(x, '__iter__'):
         return np.array(x), True
-    return np.array([x]), False
+    return np.array([x], dtype=np.double), False
 
 def ellipticity(a, b):
     """Returns 1-abs(b/a)"""
