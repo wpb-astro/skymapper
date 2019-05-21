@@ -41,18 +41,19 @@ def stdDistortionScale(a,b):
     """
     return stdScale(a,b) + stdDistortion(a,b)
 
-def _optimize_objective(x, proj_type, lon, lat, crit):
+def _optimize_objective(x, proj_cls, lon_type, lon, lat, crit):
     """Construct projections from parameters `x` and compute `crit` for `lon, lat`"""
-    proj = proj_type(*x)
+    proj = proj_cls(*x, lon_type=lon_type)
     a, b = proj.distortion(lon, lat)
     return crit(a,b)
 
-def _optimize(proj_cls, x0, lon, lat, crit, bounds=None):
+def _optimize(proj_cls, x0, lon_type, lon, lat, crit, bounds=None):
     """Determine parameters for `proj_cls` that minimize `crit` over `lon, lat`.
 
     Args:
         proj_cls: projection class
-        x0: initial arguments for projection class `__init__`
+        x0: arguments for projection class `__init__`
+        lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         lon: list of rectascensions
         lat: list of declinations
         crit: optimization criterion
@@ -63,9 +64,10 @@ def _optimize(proj_cls, x0, lon, lat, crit, bounds=None):
         optimized projection of class `proj_cls`
     """
     print ("optimizing parameters of %s to minimize %s" % (proj_cls.__name__, crit.__name__))
-    x, fmin, d = scipy.optimize.fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, lon, lat, crit), bounds=bounds, approx_grad=True)
-    print ("Best objective %.6f at %r" % (fmin, x))
-    return proj_cls(*x)
+    x, fmin, d = scipy.optimize.fmin_l_bfgs_b(_optimize_objective, x0, args=(proj_cls, lon_type, lon, lat, crit), bounds=bounds, approx_grad=True)
+    res = proj_cls(*x, lon_type=lon_type)
+    print ("best objective %.6f at %r" % (fmin, res))
+    return res
 
 def _dist(radec, proj, xy):
     return np.sum((xy - np.array(proj(radec[0], radec[1])))**2)
@@ -86,13 +88,16 @@ class BaseProjection(object):
         Args:
             lon_0 (int, float):  reference longitude
             lon_type (string): type of longitude
-                needs to be "ra" or "lon" for a coordinates system in ecliptic
-                coordinates (left-handed, 0..360 deg) or conventional
-                (right-handed, -180..180 deg)
+                "lon" for a standard coordinate system (right-handed, -180..180 deg)
+                "ra" for n equatorial coordinate system (left-handed, 0..360 deg)
         """
         assert lon_type in ['ra', 'lon']
         self.lon_0 = lon_0
         self.lon_type = lon_type
+        if self.lon_type == "ra" and self.lon_0 < 0:
+            self.lon_0 += 360
+        elif self.lon_type == "lon" and self.lon_0 > 180:
+            self.lon_0 -= 360
 
     def __call__(self, lon, lat):
         """Shorthand for `transform`
@@ -283,7 +288,7 @@ class BaseProjection(object):
         return a, b
 
     @classmethod
-    def optimize(cls, lon, lat, crit=meanDistortion):
+    def optimize(cls, lon, lat, crit=meanDistortion, lon_type="ra"):
         """Optimize the parameters of projection to minimize `crit` over `lon,lat`
 
         Args:
@@ -291,19 +296,18 @@ class BaseProjection(object):
             lat: list of latitude
             crit: optimization criterion
                 needs to be function of semi-major and semi-minor axes of the Tissot indicatix
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
 
         Returns:
             optimized projection
         """
         lon_ = np.array(lon)
+        # go into standard frame, right or left-handed is irrelevant here
         lon_[lon_ > 180] -= 360
         lon_[lon_ < -180] += 360
-        ra0 = lon_.mean()
-        if ra0 < 0:
-            ra0 += 360
-        x0 = np.array((ra0,))
-        bounds = ((0, 360),)
-        return _optimize(cls, x0, lon, lat, crit, bounds=bounds)
+        bounds = ((-180,180),)
+        x0 = np.array((lon_.mean(),))
+        return _optimize(cls, x0, lon_type, lon, lat, crit, bounds=bounds)
 
     def __repr__(self):
         return "%s(%r)" % (self.__class__.__name__, self.lon_0)
@@ -336,10 +340,11 @@ class ConicProjection(BaseProjection):
         """Base class for conic projections
 
         Args:
-            `lon_0`: longitude that maps onto x = 0
-            `lat_0`: latitude that maps onto y = 0
-            `lat_1`: lower standard parallel
-            `lat_2`: upper standard parallel (must not be -lat_1)
+            lon_0: longitude that maps onto x = 0
+            lat_0: latitude that maps onto y = 0
+            lat_1: lower standard parallel
+            lat_2: upper standard parallel (must not be -lat_1)
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(ConicProjection, self).__init__(lon_0, lon_type)
         self.lat_0 = lat_0
@@ -349,12 +354,22 @@ class ConicProjection(BaseProjection):
             self.lat_1, self.lat_2 = self.lat_2, self.lat_1
 
     @classmethod
-    def optimize(cls, lon, lat, crit=meanDistortion):
+    def optimize(cls, lon, lat, crit=meanDistortion, lon_type="ra"):
         """Optimize the parameters of projection to minimize `crit` over `lon,lat`
 
         Uses median latitude and latitude-weighted longitude as reference,
         and places standard parallels 1/6 inwards from the min/max latitude
         to minimize scale variations (Snyder 1987, section 14).
+
+        Args:
+            lon: list of longitude
+            lat: list of latitude
+            crit: optimization criterion
+                needs to be function of semi-major and semi-minor axes of the Tissot indicatix
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
+
+        Returns:
+            optimized projection
         """
         # for conics: need to determine central lon, lat plus two standard parallels
         # normalize lon
@@ -375,35 +390,38 @@ class ConicProjection(BaseProjection):
 
         x0 = np.array((lon0, lat0, lat1, lat2))
         bounds = ((0, 360), (-90,90),(-90,90), (-90,90))
-        return _optimize(cls, x0, lon, lat, crit, bounds=bounds)
+        return _optimize(cls, x0, lon, lat, crit, bounds=bounds, lon_type=lon_type)
 
     def __repr__(self):
         return "%s(%r,%r,%r,%r)" % (self.__class__.__name__, self.lon_0, self.lat_0, self.lat_1, self.lat_2)
 
 
 class Albers(ConicProjection, Projection):
+    """Albers Equal-Area conic projection
+
+    AEA is a conic projection with an origin along the lines connecting
+    the poles. It preserves relative area, but is not conformal,
+    perspective or equistant.
+
+    Its preferred use of for areas with predominant east-west extent
+    at moderate latitudes.
+
+    As a conic projection, it depends on two standard parallels, i.e.
+    intersections of the cone with the sphere. To minimize scale variations,
+    these standard parallels should be chosen as small as possible while
+    spanning the range in declinations of the data.
+
+    For details, see Snyder (1987, section 14).
+    """
     def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
-        """Albers Equal-Area conic projection
-
-        AEA is a conic projection with an origin along the lines connecting
-        the poles. It preserves relative area, but is not conformal,
-        perspective or equistant.
-
-        Its preferred use of for areas with predominant east-west extent
-        at moderate latitudes.
-
-        As a conic projection, it depends on two standard parallels, i.e.
-        intersections of the cone with the sphere. To minimize scale variations,
-        these standard parallels should be chosen as small as possible while
-        spanning the range in declinations of the data.
-
-        For details, see Snyder (1987, section 14).
+        """Create Albers projection
 
         Args:
             lon_0: longitude that maps onto x = 0
             lat_0: latitude that maps onto y = 0
             lat_1: lower standard parallel
             lat_2: upper standard parallel (must not be -lat_1)
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(Albers, self).__init__(lon_0, lat_0, lat_1, lat_2, lon_type=lon_type)
 
@@ -436,28 +454,31 @@ class Albers(ConicProjection, Projection):
 
 
 class LambertConformal(ConicProjection, Projection):
+    """Lambert Conformal conic projection
+
+    LCC is a conic projection with an origin along the lines connecting
+    the poles. It preserves angles, but is not equal-area,
+    perspective or equistant.
+
+    Its preferred use of for areas with predominant east-west extent
+    at higher latitudes.
+
+    As a conic projection, it depends on two standard parallels, i.e.
+    intersections of the cone with the sphere. To minimize scale variations,
+    these standard parallels should be chosen as small as possible while
+    spanning the range in declinations of the data.
+
+    For details, see Snyder (1987, section 15).
+    """
     def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
-        """Lambert Conformal conic projection
-
-        LCC is a conic projection with an origin along the lines connecting
-        the poles. It preserves angles, but is not equal-area,
-        perspective or equistant.
-
-        Its preferred use of for areas with predominant east-west extent
-        at higher latitudes.
-
-        As a conic projection, it depends on two standard parallels, i.e.
-        intersections of the cone with the sphere. To minimize scale variations,
-        these standard parallels should be chosen as small as possible while
-        spanning the range in declinations of the data.
-
-        For details, see Snyder (1987, section 15).
+        """Create Lambert Conformal Conic projection
 
         Args:
             lon_0: longitude that maps onto x = 0
             lat_0: latitude that maps onto y = 0
             lat_1: lower standard parallel
             lat_2: upper standard parallel (must not be -lat_1)
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(LambertConformal, self).__init__(lon_0, lat_0, lat_1, lat_2, lon_type=lon_type)
 
@@ -505,26 +526,29 @@ class LambertConformal(ConicProjection, Projection):
 
 
 class Equidistant(ConicProjection, Projection):
+    """Equidistant conic projection
+
+    Equistant conic is a projection with an origin along the lines connecting
+    the poles. It preserves distances along the map, but is not conformal,
+    perspective or equal-area.
+
+    Its preferred use is for smaller areas with predominant east-west extent
+    at moderate latitudes.
+
+    As a conic projection, it depends on two standard parallels, i.e.
+    intersections of the cone with the sphere.
+
+    For details, see Snyder (1987, section 16).
+    """
     def __init__(self, lon_0, lat_0, lat_1, lat_2, lon_type="ra"):
-        """Equidistant conic projection
-
-        Equistant conic is a projection with an origin along the lines connecting
-        the poles. It preserves distances along the map, but is not conformal,
-        perspective or equal-area.
-
-        Its preferred use is for smaller areas with predominant east-west extent
-        at moderate latitudes.
-
-        As a conic projection, it depends on two standard parallels, i.e.
-        intersections of the cone with the sphere.
-
-        For details, see Snyder (1987, section 16).
+        """Create Equidistant Conic projection
 
         Args:
             lon_0: longitude that maps onto x = 0
             lat_0: latitude that maps onto y = 0
             lat_1: lower standard parallel
             lat_2: upper standard parallel (must not be +-lat_1)
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(Equidistant, self).__init__(lon_0, lat_0, lat_1, lat_2, lon_type=lon_type)
 
@@ -556,17 +580,23 @@ class Equidistant(ConicProjection, Projection):
 
 
 class Hammer(Projection):
+    """Hammer projection
+
+    Hammer's 2:1 ellipse modification of the Lambert azimuthal equal-area
+    projection.
+
+    Its preferred use is for all-sky maps with an emphasis on low latitudes.
+    It reduces the distortion at the outer meridians and has an elliptical
+    outline. The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1987, section 24).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """Hammer projection
+        """Create Hammer projection
 
-        Hammer's 2:1 ellipse modification of the Lambert azimuthal equal-area
-        projection.
-
-        Its preferred use is for all-sky maps with an emphasis on low latitudes.
-        It reduces the distortion at the outer meridians and has an elliptical
-        outline. The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1987, section 24).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(Hammer, self).__init__(lon_0, lon_type)
 
@@ -587,14 +617,20 @@ class Hammer(Projection):
 
 
 class Mollweide(Projection):
+    """Mollweide projection
+
+    Mollweide elliptical equal-area projection. It is used for all-sky maps,
+    but it introduces strong distortions at the outer meridians.
+    The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1987, section 31).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """Mollweide projection
+        """Create Mollweide projection
 
-        Mollweide elliptical equal-area projection. It is used for all-sky maps,
-        but it introduces strong distortions at the outer meridians.
-        The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1987, section 31).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(Mollweide, self).__init__(lon_0, lon_type)
         self.sqrt2 = np.sqrt(2)
@@ -639,13 +675,19 @@ class Mollweide(Projection):
 
 
 class EckertIV(Projection):
+    """Eckert IV projection
+
+    Eckert's IV equal-area projection is used for all-sky maps.
+    The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1987, section 32).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """Eckert IV projection
+        """Create Eckert IV projection
 
-        Eckert's IV equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1987, section 32).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(EckertIV, self).__init__(lon_0, lon_type)
         self.c1 = 2 / np.sqrt(4*np.pi + np.pi**2)
@@ -686,13 +728,19 @@ class EckertIV(Projection):
 
 
 class WagnerI(Projection):
+    """Wagner I projection
+
+    Wagners's I equal-area projection is used for all-sky maps.
+    The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1993, p. 204).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """Wagner I projection
+        """Create WagnerI projection
 
-        Wagners's I equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1993, p. 204).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(WagnerI, self).__init__(lon_0, lon_type)
         self.c1 = 2 / 3**0.75
@@ -719,13 +767,19 @@ class WagnerI(Projection):
 
 
 class WagnerIV(Projection):
+    """Wagner IV projection
+
+    Wagner's IV equal-area projection is used for all-sky maps.
+    The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1993, p. 204).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """Wagner IV projection
+        """Create WagnerIV projection
 
-        Wagner's IV equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1993, p. 204).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(WagnerIV, self).__init__(lon_0, lon_type)
         self.c1 = 0.86310
@@ -771,13 +825,19 @@ class WagnerIV(Projection):
 
 
 class WagnerVII(Projection):
+    """Wagner VII projection
+
+    WagnerVII equal-area projection is used for all-sky maps.
+    The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1993, p. 237).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """Wagner VII projection
+        """Create WagnerVII projection
 
-        WagnerVII equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1993, p. 237).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(WagnerVII, self).__init__(lon_0, lon_type)
         self.c1 = 2.66723
@@ -799,13 +859,19 @@ class WagnerVII(Projection):
 
 
 class McBrydeThomasFPQ(Projection):
+    """McBryde-Thomas Flat-Polar Quartic projection
+
+    McBrydeThomasFPQ equal-area projection is used for all-sky maps.
+    The only free parameter is the reference RA `lon_0`.
+
+    For details, see Snyder (1993, p. 211).
+    """
     def __init__(self, lon_0=0, lon_type="ra"):
-        """McBryde-Thomas Flat-Polar Quartic projection
+        """Create McBryde-Thomas Flat-Polar Quartic projection
 
-        McBrydeThomasFPQ equal-area projection is used for all-sky maps.
-        The only free parameter is the reference RA `lon_0`.
-
-        For details, see Snyder (1993, p. 211).
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(McBrydeThomasFPQ, self).__init__(lon_0, lon_type)
         self.c1 = 1 / np.sqrt(3*np.sqrt(2) + 6)
@@ -846,18 +912,27 @@ class McBrydeThomasFPQ(Projection):
 
 
 class HyperElliptical(Projection):
+    """Hyperelliptical projection
+
+    The outline of the map follows the equation
+        |x/a|^k + |y/b|^k = gamma^k
+    The parameter alpha is a weight between cylindrical equal-area (alpha=0)
+    and sinosoidal projections.
+
+    The projection does not have a closed form for either forward or backward
+    transformation and this therefore computationally expensive.
+
+    See Snyder (1993, p. 220) for details.
+    """
     def __init__(self, lon_0, alpha, k, gamma, lon_type="ra"):
-        """Hyperelliptical projections.
+        """Create Hyperelliptical projection
 
-        The outline of the map follows the equation
-            |x/a|^k + |y/b|^k = gamma^k
-        The parameter alpha is a weight between cylindrical equal-area (alpha=0)
-        and sinosoidal projections.
-
-        The projection does not have a closed form for either forward or backward
-        transformation and this therefore computationally expensive.
-
-        See Snyder (1993, p. 220) for details.
+        Args:
+            lon_0: longitude that maps onto x = 0
+            alpha: cylindrical-sinosoidal weight
+            k: hyperelliptical exponent
+            gamma: hyperelliptical scale
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
         """
         super(HyperElliptical, self).__init__(lon_0, lon_type)
         self.alpha = alpha
@@ -950,7 +1025,7 @@ class HyperElliptical(Projection):
         return y
 
 class Tobler(HyperElliptical):
-    """Tobler hyperelliptical projection.
+    """Tobler hyperelliptical projection
 
     Tobler's cylindrical equal-area projection is a specialization of
     `HyperElliptical` with parameters `alpha=0`, `k=2.5`, `gamma=1.183136`.
@@ -958,12 +1033,18 @@ class Tobler(HyperElliptical):
     See Snyder (1993, p. 220) for details.
     """
     def __init__(self, lon_0=0, lon_type="ra"):
+        """Create Tobler projection
+
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
+        """
         alpha, k, gamma = 0., 2.5, 1.183136
         super(Tobler, self).__init__(lon_0, alpha, k, gamma, lon_type=lon_type)
 
 
 class EqualEarth(Projection):
-    """Equal Earth projection.
+    """Equal Earth projection
 
     The Equal Earth projection is a pseudo-cylindrical equal-area projection
     with modest distortion.
@@ -971,6 +1052,12 @@ class EqualEarth(Projection):
     See https://doi.org/10.1080/13658816.2018.1504949 for details.
     """
     def __init__(self, lon_0=0, lon_type="ra"):
+        """Create Equal Earth projection
+
+        Args:
+            lon_0: longitude that maps onto x = 0
+            lon_type: type of longitude, "lon" or "ra" (see `BaseProjection`)
+        """
         super(EqualEarth, self).__init__(lon_0, lon_type)
         self.A1 = 1.340264
         self.A2 = -0.081106
