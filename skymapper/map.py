@@ -527,7 +527,7 @@ class Map():
 
         for m in meridians:
             # move label along meridian
-            xp, yp = self.proj.transform(m, p)
+            xp, yp = self.proj(m, p)
             dxy = self.proj.gradient(m, p, direction="meridian")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if loc == 'bottom': # dxy in positive RA
@@ -608,7 +608,7 @@ class Map():
 
         for p in parallels:
             # move label along parallel
-            xp, yp = self.proj.transform(m, p)
+            xp, yp = self.proj(m, p)
             dxy = self.proj.gradient(m, p, direction="parallel")
             dxy *= pad / np.sqrt((dxy**2).sum())
             if m < self.proj.lon_0: # meridians on the left: dx goes in positive RA

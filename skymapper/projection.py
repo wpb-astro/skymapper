@@ -98,16 +98,28 @@ class BaseProjection(object):
             self.lon_0 -= 360
 
     def __call__(self, lon, lat):
-        """Shorthand for `transform`
+        """Shorthand for `transform`. Works also with single coordinates
+
+        Args:
+            lon (float, array): longitude
+            lat (float, array): latitude
         """
-        return self.transform(lon, lat)
+        lon_, isArray = _toArray(lon)
+        lat_, isArray = _toArray(lat)
+        x, y = self.transform(lon_, lat_)
+        if isArray:
+            return x, y
+        else:
+            return x[0], y[0]
 
     def transform(self, lon, lat):
         """Convert longitude/latitude into map coordinates
 
+        Note: Unlike `__call__`, lon/lat need to be arrays!
+
         Args:
-            lon:  float or array of floats
-            lat: float or array of floats
+            lon (array): longitudes
+            lat (array): latitudes
 
         Returns:
             x,y with the same format as lon,lat
@@ -172,28 +184,23 @@ class BaseProjection(object):
 
     def _standardize(self, lon):
         """Normalize longitude to -180 .. 180, with reference `lon_0` at 0"""
-        lon_, isArray = _toArray(lon)
-        lon_ -= self.lon_0
+        lon_ = lon - self.lon_0 # need copy to prevent changing data
         if self.lon_type == "ra":
             lon_ *= -1 # left-handed
         # check that lon_ is between -180 and 180 deg
         lon_[lon_ < -180 ] += 360
         lon_[lon_ > 180 ] -= 360
-        if isArray:
-            return lon_
-        return lon_[0]
+        return lon_
 
     def _unstandardize(self, lon):
         """Revert `_standardize`"""
-        lon_, isArray = _toArray(lon)
+        # no copy needed since all lons have been altered/transformed before
         if self.lon_type == "ra":
-            lon_ *= -1 # left-handed
-        lon_ += self.lon_0
-        lon_ [lon_ < 0] += 360
-        lon_ [lon_ > 360] -= 360
-        if isArray:
-            return lon_
-        return lon_[0]
+            lon *= -1 # left-handed
+        lon += self.lon_0
+        lon [lon < 0] += 360
+        lon [lon > 360] -= 360
+        return lon
 
     def gradient(self, lon, lat, sep=1e-2, direction='parallel'):
         """Compute the gradient in map coordinates at given sky position
@@ -635,16 +642,11 @@ class Mollweide(Projection):
 
     def transform(self, lon, lat):
         # Snyder p. 251
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        theta_ = self.theta(lat_)
+        lon_ = self._standardize(lon)
+        theta_ = self.theta(lat)
         x = 2*self.sqrt2 / np.pi * (lon_ * DEG2RAD) * np.cos(theta_)
         y = self.sqrt2 * np.sin(theta_)
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
 
     def theta(self, lat, eps=1e-6, maxiter=100):
         # Snyder 1987 p. 251
@@ -692,16 +694,11 @@ class EckertIV(Projection):
         self.c2 = 2 * np.sqrt(1/(4/np.pi + 1))
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        t = self.theta(lat_)
+        lon_ = self._standardize(lon)
+        t = self.theta(lat)
         x = self.c1 * lon_ *DEG2RAD * (1 + np.cos(t))
         y = self.c2 * np.sin(t)
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
 
     def invert(self, x, y):
         t = np.arcsin(y / self.c2)
@@ -746,16 +743,11 @@ class WagnerI(Projection):
         self.c3 = np.sqrt(3)/2
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        t = np.arcsin(self.c3*np.sin(lat_ * DEG2RAD))
+        lon_ = self._standardize(lon)
+        t = np.arcsin(self.c3*np.sin(lat * DEG2RAD))
         x = self.c1 * lon_ *DEG2RAD * np.cos(t)
         y = self.c2 * t
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
 
     def invert(self, x, y):
         t = y / self.c2
@@ -785,16 +777,11 @@ class WagnerIV(Projection):
         self.c3 = (4*np.pi + 3*np.sqrt(3)) / 6
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        t = self.theta(lat_)
+        lon_ = self._standardize(lon)
+        t = self.theta(lat)
         x = self.c1 * lon_ * DEG2RAD * np.cos(t)
         y = self.c2 * np.sin(t)
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
 
     def invert(self, x, y):
         t = np.arcsin(y / self.c2)
@@ -843,17 +830,12 @@ class WagnerVII(Projection):
         self.c3 = np.sin(65 * DEG2RAD)
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        theta = np.arcsin(self.c3 * np.sin(lat_ * DEG2RAD))
+        lon_ = self._standardize(lon)
+        theta = np.arcsin(self.c3 * np.sin(lat * DEG2RAD))
         alpha = np.arccos(np.cos(theta)*np.cos(lon_ * DEG2RAD/3))
         x = self.c1 * np.cos(theta) * np.sin(lon_ * DEG2RAD / 3) / np.cos(alpha/2)
         y = self.c2 * np.sin(theta) / np.cos(alpha/2)
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
 
 
 class McBrydeThomasFPQ(Projection):
@@ -877,16 +859,11 @@ class McBrydeThomasFPQ(Projection):
         self.c3 = 1 + np.sqrt(2) / 2
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        t = self.theta(lat_)
+        lon_ = self._standardize(lon)
+        t = self.theta(lat)
         x = self.c1 * lon_ * DEG2RAD * (1 + 2*np.cos(t)/np.cos(t/2))
         y = self.c2 * np.sin(t/2)
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
 
     def invert(self, x, y):
         t = 2*np.arcsin(y / self.c2)
@@ -940,29 +917,20 @@ class HyperElliptical(Projection):
         self.affine = np.sqrt(2 * self.gamma / np.pi)
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
-        y = self.Y(np.sin(np.abs(lat_ * DEG2RAD)))
+        lon_ = self._standardize(lon)
+        y = self.Y(np.sin(np.abs(lat * DEG2RAD)))
         x = lon_ * DEG2RAD * (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y)) * self.affine
-        y *= np.sign(lat_) / self.affine
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        y *= np.sign(lat) / self.affine
+        return x, y
 
     def invert(self, x, y):
-        y_, isArray = _toArray(y * self.affine)
+        y_ = y * self.affine
         sinphi = self.sinPhiDiff(y_, 0)
         lat = np.sign(y) * np.arcsin(sinphi) / DEG2RAD
 
-        x_, isArray = _toArray(x)
-        lon = x_ / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
+        lon = x / self.affine / (self.alpha + (1 - self.alpha) / self.gamma * self.elliptic(y_)) / DEG2RAD
         lon = self._unstandardize(lon)
-        if isArray:
-            return  lon, lat
-        else:
-            return  lon[0], lat[0]
+        return  lon, lat
 
     def elliptic(self, y):
         """Returns (gamma^k - y^k)^1/k
@@ -971,7 +939,6 @@ class HyperElliptical(Projection):
 
         f = (self.gamma_pow_k - y_**self.k)**(1/self.k)
         f[y_ < 0 ] = self.gamma
-        #f[y > self.gamma] = 0
 
         if isArray:
             return f
@@ -1064,17 +1031,11 @@ class EqualEarth(Projection):
         self.sqrt3 = np.sqrt(3)
 
     def transform(self, lon, lat):
-        lon_, isArray = _toArray(lon)
-        lat_, isArray = _toArray(lat)
-        lon_ = self._standardize(lon_)
+        lon_ = self._standardize(lon)
 
-        t = np.arcsin(self.sqrt3/2 * np.sin(lat_ * DEG2RAD))
+        t = np.arcsin(self.sqrt3/2 * np.sin(lat * DEG2RAD))
         t2 = t*t
         t6 = t2*t2*t2
         x = 2/3*self.sqrt3 * lon_ * DEG2RAD * np.cos(t) / (self.A1 + 3*self.A2*t2 + t6*(7*self.A3 + 9*self.A4*t2))
         y = t*(self.A1 + self.A2*t2 + t6*(self.A3 + self.A4*t2))
-
-        if isArray:
-            return x, y
-        else:
-            return x[0], y[0]
+        return x, y
