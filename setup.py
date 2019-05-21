@@ -7,7 +7,7 @@ setup(
     description="Mapping astronomical survey data on the sky, handsomely",
     long_description=long_description,
     long_description_content_type='text/markdown',
-    version="0.3.1",
+    version="0.3.2",
     license="MIT",
     author="Peter Melchior",
     author_email="peter.m.melchior@gmail.com",

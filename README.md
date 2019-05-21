@@ -7,7 +7,7 @@
 
 The purpose of this package is to facilitate interactive work as well as the the creation of publication-quality plots with a python-based workflow many astronomers are accustomed to. The primary motivation is a truthful representation of samples and fields from the curved sky in planar figures, which becomes relevant when sizable portions of the sky are observed.
 
-What can it do? For instance, find the optimal projection for a given list of RA/Dec coordinations and [creating a density map](examples/example1.py) from a catalog in a few lines:
+What can it do? For instance, find the optimal projection for a given list of spherical coordinates and [creating a density map](examples/example1.py) from a catalog in a few lines:
 
 ```python
 import skymapper as skm
@@ -47,7 +47,7 @@ The syntax mimics `matplotlib` as closely as possible. Currently supported are c
 
 * `plot`
 * `scatter`
-* `hexbin` for binning and interpolating samples (RA, Dec, and optional an associated value)
+* `hexbin` for binning and interpolating samples
 * `text` (with an optional `direction in ['parallel','meridian']` argument to align along either graticule)
 
 as well as special functions
@@ -85,7 +85,7 @@ The essential parts of the workflow are
 
 Several map projections are available, the full list is stored in the dictionary `projection_register`. If the projection you want isn't included, open an issue, or better: create it yourself (see below) and submit a pull request.
 
-Since most ground-based surveys have predominant East-West coverage, we suggest using conic projections, in particular the equal-area `Albers` conic (an discussion why exactly that one is [here](http://pmelchior.net/blog/map-projections-for-surveys.html)).
+There are two conventions for longitudes in astronomy. The standard frame, used for instance for world maps or Galactic maps, has a longitudinal coordinates in the range [-180 .. 180] deg, which increase west to east (in other words, on the map east is right). The equatorial (RA/Dec) frame is left-handed (i.e. on the map east is left) and has coordinates in the range [0 .. 360] deg. To determine the convention, `Projection` has an argument `lon_type`, which can be either `"lon"` or `"ra"` for standard or equatorial, respectively. The default is `lon_type="ra"`.
 
 Map projections can preserve sky area, angles, or distances, but never all three. That means defining a suitable projection must be a compromise. For most applications, sizes should exactly be preserved, which means that angles and distances may not be. The optimal projection for a given list of `ra`, `dec` can be found by calling:
 
@@ -97,22 +97,22 @@ proj = skm.Albers.optimize(ra, dec, crit=crit)
 
 This optimizes the `Albers` projection parameters to minimize the variance of the map distortion (i.e. the apparent ellipticity of a true circle on the sky). Alternative criteria are e.g. `maxDistortion` or `stdScale` (for projections that are not equal-area).
 
-### Defining a projection
+### Creating a custom projection
 
-For constructing your own projection, derive from [`Projection`](skymapper/projection.py). You'll see that every projection needs to implement at least the first of these methods: 
+For constructing your own projection, derive from [`Projection`](skymapper/projection.py). You'll see that every projection needs to implement at least these methods: 
 
-* `transform` to map from RA/Dec to map coordinates x/y
-* `invert` to map from x/y to RA/Dec (if not implemented defaults to basic and slow BFGS inversion)
+* `transform` to map from spherical to map coordinates x/y
+* `invert` to map from x/y to spherical (if not implemented defaults to basic and slow BFGS inversion)
 
-If the projection has several parameters, you will want to create a special `@classmethod optimize` because the default one only determines the best RA reference. An example for that is given in e.g. `ConicProjection.optimize`.
+If the projection has several parameters, you will want to create a special `@classmethod optimize` because the default one only determines the best longitude reference. An example for that is given in e.g. `ConicProjection.optimize`.
 
-### Defining a survey
+### Creating/using a survey
 
-To make it easy to share survey footprints (and other details), we can hold them in a common place. To create one you only need to derive a class from [`Survey`](skymapper/survey/__init__.py), which only needs to implement one method:
+Several surveys are predefined and listed in the `survey_register` dictionary. If the survey you want isn't included, don't despair. To create one can derive a class from [`Survey`](skymapper/survey/__init__.py), which only needs to implement one method:
 
-​	`def contains(self, ra, dec)` to determine whether RA, Dec are inside the footprint
+​	`def contains(self, ra, dec)` to determine whether RA, Dec are inside the footprint.
 
-If this looks like the [`pymangle`](https://github.com/esheldon/pymangle) interface: it should. That means that you can avoid the overhead of having to define a survey and pass a `pymangle.Mangle` object directly to `footprint()`.
+If this looks like the [`pymangle`](https://github.com/esheldon/pymangle) interface: it should. That means that you can avoid the overhead of having to define a survey and e.g. pass a `pymangle.Mangle` object directly to `footprint()`.
 
 ### Limitation(s)
 
