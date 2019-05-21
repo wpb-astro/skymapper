@@ -1,7 +1,6 @@
 # load projection and helper functions
 import numpy as np
 import skymapper as skm
-import matplotlib.pylab as plt
 
 def getCatalog(size=10000, survey=None):
     # dummy catalog: uniform on sphere

@@ -1,15 +1,13 @@
 import skymapper as skm
-import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
-
     # cycle through all defined projections and show the full sky
     # with default graticules
-    args = {"ra_0": 0}
-    conic_args = {"ra_0":0,
-                "dec_0": -10,
-                "dec_1": -40,
-                "dec_2": 10
+    args = {"lon_0": 0}
+    conic_args = {"lon_0":0,
+                "lat_0": -10,
+                "lat_1": -40,
+                "lat_2": 10
                 }
 
     for name, proj_cls in skm.projection_register.items():
