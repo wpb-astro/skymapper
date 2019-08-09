@@ -987,19 +987,19 @@ class Map():
         self.fig.canvas.draw()
 
     #### common plot type for maps: follow mpl convention ####
-    def plot(self, ra, dec, *args, **kwargs):
-        """Matplotlib `plot` with `ra/dec` points transformed according to map projection"""
-        x, y = self.proj.transform(ra, dec)
+    def plot(self, lon, lat, *args, **kwargs):
+        """Matplotlib `plot` with `lon/lat` points transformed according to map projection"""
+        x, y = self.proj.transform(lon, lat)
         return self.ax.plot(x, y, *args, **kwargs)
 
-    def scatter(self, ra, dec, **kwargs):
-        """Matplotlib `scatter` with `ra/dec` points transformed according to map projection"""
-        x, y = self.proj.transform(ra, dec)
+    def scatter(self, lon, lat, **kwargs):
+        """Matplotlib `scatter` with `lon/lat` points transformed according to map projection"""
+        x, y = self.proj.transform(lon, lat)
         return self.ax.scatter(x, y, **kwargs)
 
-    def hexbin(self, ra, dec, C=None, **kwargs):
-        """Matplotlib `hexbin` with `ra/dec` points transformed according to map projection"""
-        x, y = self.proj.transform(ra, dec)
+    def hexbin(self, lon, lat, C=None, **kwargs):
+        """Matplotlib `hexbin` with `lon/lat` points transformed according to map projection"""
+        x, y = self.proj.transform(lon, lat)
         # determine proper gridsize: by default x is only needed, y is chosen accordingly
         gridsize = kwargs.pop("gridsize", None)
         mincnt = kwargs.pop("mincnt", 1)
@@ -1021,21 +1021,23 @@ class Map():
         artist.set_clip_path(clip_path)
         return artist
 
-    def text(self, ra, dec, s, rotation=None, direction="parallel", **kwargs):
-        """Matplotlib `text` with coordinates given by `ra/dec`.
+    def text(self, lon, lat, s, rotation=None, direction="parallel", **kwargs):
+        """Matplotlib `text` with coordinates given by `lon/lat`.
 
         Args:
-            ra: rectascension of text
-            dec: declination of text
+            lon: longitude of text
+            lat: latitude of text
             s: string
             rotation: if text should be rotated to tangent direction
             direction: tangent direction, from `['parallel', 'meridian']`
             **kwargs: styling arguments for `matplotlib.text`
         """
-        x, y = self.proj.transform(ra, dec)
+        x, y = self.proj(lon, lat)
 
         if rotation is None:
-            dxy_ = self.proj.gradient(ra, dec, direction=direction)
+            dxy_ = self.proj.gradient(lon, lat, direction=direction)
+            if self.proj.lon_type == "ra":
+                dxy_[0] *= -1
             angle = 90-np.arctan2(*dxy_) / DEG2RAD
         else:
             angle = rotation
@@ -1081,18 +1083,18 @@ class Map():
     def title(self, label, **kwargs):
         return self.fig.suptitle(label, **kwargs)
 
-    def focus(self, ra, dec, pad=0.025):
-        """Focus onto region of map covered by `ra/dec`
+    def focus(self, lon, lat, pad=0.025):
+        """Focus onto region of map covered by `lon/lat`
 
-        Adjusts x/y limits to encompass given `ra/dec`.
+        Adjusts x/y limits to encompass given `lon/lat`.
 
         Args:
-            ra: list of rectascensions
-            dec: list of declinations
+            lon: list of longitudes
+            lat: list of latitudes
             pad: distance to edge of the frame, in units of axis size
         """
         # to replace the autoscale function that cannot zoom in
-        x, y = self.proj.transform(ra, dec)
+        x, y = self.proj.transform(lon, lat)
         xlim = [x.min(), x.max()]
         ylim = [y.min(), y.max()]
         xrange = xlim[1]-xlim[0]
@@ -1218,17 +1220,17 @@ class Map():
         inside = survey.contains(rap, decp)
         return self.vertex(vertices[inside], **kwargs)
 
-    def density(self, ra, dec, nside=1024, color_percentiles=[10,90], **kwargs):
+    def density(self, lon, lat, nside=1024, color_percentiles=[10,90], **kwargs):
         """Plot sample density using healpix binning
 
         Args:
-            ra: list of rectascensions
-            dec: list of declinations
+            lon: list of longitudes
+            lat: list of latitudes
             nside: HealPix nside
             color_percentiles: lower and higher cutoff percentile for map coloring
         """
         # get count in healpix cells, restrict to non-empty cells
-        bc, rap, decp, vertices = healpix.getCountAtLocations(ra, dec, nside=nside, return_vertices=True)
+        bc, lonp, latp, vertices = healpix.getCountAtLocations(lon, lat, nside=nside, return_vertices=True)
         color = bc
 
         # color range
@@ -1247,20 +1249,20 @@ class Map():
         # make map
         return self.vertex(vertices, color=color, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
 
-    def extrapolate(self, ra, dec, value, resolution=100, **kwargs):
-        """Extrapolate ra,dec,value samples on the entire sphere
+    def extrapolate(self, lon, lat, value, resolution=100, **kwargs):
+        """Extrapolate lon,lat,value samples on the entire sphere
 
         Requires scipy, uses `scipy.interpolate.Rbf`.
 
         Args:
-            ra: list of rectascensions
-            dec: list of declinations
+            lon: list of longitudes
+            lat: list of latitudes
             value: list of sample values
             resolution: number of evaluated cells per linear map dimension
             **kwargs: arguments for matplotlib.imshow
         """
-        # interpolate samples in RA/DEC
-        rbfi = scipy.interpolate.Rbf(ra, dec, value, norm=skyDistance)
+        # interpolate samples in lon/lat
+        rbfi = scipy.interpolate.Rbf(lon, lat, value, norm=skyDistance)
 
         # make grid in x/y over the limits of the map or the clip_path
         clip_path = kwargs.pop('clip_path', self._edge)
@@ -1280,8 +1282,8 @@ class Map():
         inside = self.contains(xp,yp)
         vp = np.ma.array(np.empty(xp.shape), mask=~inside)
 
-        rap, decp = self.proj.inv(xp[inside], yp[inside])
-        vp[inside] = rbfi(rap, decp)
+        lonp, latp = self.proj.inv(xp[inside], yp[inside])
+        vp[inside] = rbfi(lonp, latp)
 
         # xp,yp whose centers aren't in the map have no values:
         # edges of map are not clean
