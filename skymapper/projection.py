@@ -183,7 +183,7 @@ class BaseProjection(object):
             rnd_meridian = -180 + 360*np.random.rand(N) + self.lon_0
             for deg in [-90, 90]:
                 line = self.transform(rnd_meridian, deg*np.ones(N))
-                if np.unique(line[0]).size > 1 and np.unique(line[1]).size > 1:
+                if np.unique(line[0]).size > 1 or np.unique(line[1]).size > 1:
                     self._poleIsPoint[deg] = False
                 else:
                     self._poleIsPoint[deg] = True
