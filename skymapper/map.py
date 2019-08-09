@@ -124,6 +124,9 @@ def degEastWestFormatter(deg):
             d = 'W'
         return degFormatter(deg) + d
 
+def nullFormatter(deg):
+    return ""
+    
 
 def _parseArgs(locals):
     """Turn list of arguments (all named or kwargs) into flat dictionary"""
