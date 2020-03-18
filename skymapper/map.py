@@ -17,7 +17,10 @@ def skyDistance(radec, radec_ref):
     ra_ref, dec_ref = radec_ref
     ra_diff = np.abs(ra - ra_ref)
     mask = ra_diff > 180
-    ra_diff[mask] = 360 - ra_diff[mask]
+    if not np.isscalar(ra):
+        ra_diff[mask] = 360 - ra_diff[mask]
+    elif mask:
+        ra_diff = 360 - ra_diff
     ra_diff *= np.cos(dec_ref*DEG2RAD)
     dec_diff = dec - dec_ref
     return np.sqrt(ra_diff**2 + dec_diff**2)
@@ -126,7 +129,7 @@ def degEastWestFormatter(deg):
 
 def nullFormatter(deg):
     return ""
-    
+
 
 def _parseArgs(locals):
     """Turn list of arguments (all named or kwargs) into flat dictionary"""
@@ -169,21 +172,25 @@ class Map():
         self.ax.relim()
         self.ax.autoscale_view()
         self._setFrame()
-        self.fig.tight_layout(pad=0.75)
 
     def _setFigureAx(self, ax=None, interactive=True):
         if ax is None:
-            self.fig = matplotlib.pyplot.figure()
+            self.fig = matplotlib.pyplot.figure(tight_layout=True)
             self.ax = self.fig.add_subplot(111, aspect='equal')
         else:
             self.ax = ax
             self.ax.set_aspect('equal')
             self.fig = self.ax.get_figure()
-        self.ax.set_axis_off()
-        # do not unset the x/y ticks by e.g. xticks([]), we need them for tight_layout
+            self.fig.set_tight_layout(True)
+
+        self.ax.spines['left'].set_visible(False)
+        self.ax.spines['right'].set_visible(False)
+        self.ax.spines['top'].set_visible(False)
+        self.ax.spines['bottom'].set_visible(False)
         self.ax.xaxis.set_visible(False)
-        self.ax.xaxis.set_ticks_position('none')
         self.ax.yaxis.set_visible(False)
+        self.ax.tick_params(axis='both', which='both', length=0)
+        self.ax.xaxis.set_ticks_position('none')
         self.ax.yaxis.set_ticks_position('none')
 
         # attach event handlers
@@ -267,7 +274,6 @@ class Map():
         for args in parallel_args.values():
             map.labelParallelsAtMeridian(**args)
 
-        map.fig.tight_layout(pad=0.75)
         return map
 
     @property
@@ -542,7 +548,7 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
+            self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, in_layout=False, **kwargs)
 
     def labelParallelsAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', fmt=None, **kwargs):
         """Label the parallel intersecting a given meridian
@@ -623,9 +629,10 @@ class Map():
             else:
                 angle = rotation
 
-            self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, **kwargs)
+            self.ax.annotate(fmt(p), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor',  horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, in_layout=False, **kwargs)
 
-    def labelMeridiansAtFrame(self, loc='auto', meridians=None, pad=None, description=None, **kwargs):
+
+    def labelMeridiansAtFrame(self, loc='auto', meridians=None, pad=None, **kwargs):
         """Label the meridians on rectangular frame of the map
 
         If the view only shows a fraction of the map, a segment or an entire
@@ -637,7 +644,6 @@ class Map():
             loc: location of the label with respect to frame, from `['top', 'bottom']`
             meridians: list of meridians to label, if None labels all of them
             pad: padding of annotation, in units of fontsize
-            description: equivalent to `matplotlib` axis label
             **kwargs: styling of `matplotlib` annotations for the graticule labels
         """
         assert loc in [None, 'none', 'auto', 'bottom', 'top']
@@ -647,6 +653,7 @@ class Map():
         self._config[myname] = arguments
 
         # remove existing
+        self.ax.xaxis.set_visible(False)
         frame_artists = self.artists('frame-meridian-label')
         for artist in frame_artists:
             artist.remove()
@@ -680,13 +687,6 @@ class Map():
         if loc not in frame_locs:
             return
 
-        # need extra space for tight_layout to consider the frame annnotations
-        # we can't get the actual width, but we can make use the of the default width of the axes tick labels
-        self.ax.xaxis.set_visible(True)
-        self.ax.xaxis.set_ticks_position(loc)
-        self.ax.xaxis.set_label_position(loc)
-        self.fig.tight_layout(pad=0.75)
-
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         # styling consistent with frame, i.e. with edge
         color = kwargs.pop('color', self._edge.get_edgecolor())
@@ -698,6 +698,7 @@ class Map():
 
         if pad is None:
             pad = size / 3
+        pad /= 72
 
         if meridians is None:
             meridians = self.meridians
@@ -707,6 +708,7 @@ class Map():
         pos = locs[loc]
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
         xticks = []
+        xticklabels = []
         for c,match in m_artists:
             m = float(match.group(1))
             if m in meridians:
@@ -714,39 +716,31 @@ class Map():
                 xm, ym = c.get_xdata(), c.get_ydata()
                 xm_at_ylim = extrap(ylim, ym, xm)[pos]
                 if xm_at_ylim >= xlim[0] and xm_at_ylim <= xlim[1] and self.contains(xm_at_ylim, ylim[pos]):
+                    # compute the offset and the location of the label by following the meridian tangent
                     m_, p_ = self.proj.inv(xm_at_ylim, ylim[pos])
                     dxy = self.proj.gradient(m_, p_, direction="meridian")
-                    dxy /= np.sqrt((dxy**2).sum())
-                    dxy *= pad / dxy[1] # same pad from frame
+                    dxy *= pad / np.sqrt((dxy**2).sum())
                     if loc == "bottom":
                         dxy *= -1
-                    angle = 0 # no option along the frame
+                    dxy[1] = 0 # only offset in x
 
-                    x_im = (xm_at_ylim - xlim[0])/(xlim[1]-xlim[0])
-                    y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
+                    # move the position of the label by dx:
+                    # go from data coordinates to display, offset in display, go back to data
+                    offset = matplotlib.transforms.ScaledTranslation(*dxy, self.fig.dpi_scale_trans)
+                    data_offset = self.ax.transData + offset + self.ax.transData.inverted()
+                    xy_at_ylim = data_offset.transform((xm_at_ylim, ylim[pos]))
+                    xticks.append(xy_at_ylim[0])
+                    xticklabels.append(self._config['grid']['meridian_fmt'](m))
 
-                    # these are set as annotations instead of simple axis ticks
-                    # because those cannot be shifted by a constant point amount to
-                    # follow the graticule
-                    self.ax.annotate(self._config['grid']['meridian_fmt'](m), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
-                    xticks.append(x_im)
-
-        if description is not None:
-            # find gap in middle of axis
-            xticks.insert(0, 0)
-            xticks.append(1)
-            xticks = np.array(xticks)
-            gaps = (xticks[1:] + xticks[:-1]) / 2
-            center_gap = np.argmin(np.abs(gaps - 0.5))
-            x_im = gaps[center_gap]
-            y_im = (ylim[pos] - ylim[0])/(ylim[1]-ylim[0])
-            dxy = [0, pad]
-            if loc == "bottom":
-                dxy[1] *= -1
-            self.ax.annotate(description, (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-meridian-label-description', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
+        if len(xticks):
+            self.ax.xaxis.set_visible(True)
+            self.ax.xaxis.set_ticks_position(loc)
+            self.ax.xaxis.set_label_position(loc)
+            self.ax.xaxis.set_ticks(xticks)
+            self.ax.xaxis.set_ticklabels(xticklabels)
 
 
-    def labelParallelsAtFrame(self, loc='auto', parallels=None, pad=None, description=None, **kwargs):
+    def labelParallelsAtFrame(self, loc='auto', parallels=None, pad=None, **kwargs):
         """Label the parallels on rectangular frame of the map
 
         If the view only shows a fraction of the map, a segment or an entire
@@ -758,7 +752,6 @@ class Map():
             loc: location of the label with respect to frame, from `['left', 'right']`
             parallels: list of parallels to label, if None labels all of them
             pad: padding of annotation, in units of fontsize
-            description: equivalent to `matplotlib` axis label
             **kwargs: styling of `matplotlib` annotations for the graticule labels
         """
         assert loc in [None, 'none', 'auto', 'left', 'right']
@@ -768,6 +761,7 @@ class Map():
         self._config[myname] = arguments
 
         # remove existing
+        self.ax.yaxis.set_visible(False)
         frame_artists = self.artists('frame-parallel-label')
         for artist in frame_artists:
             artist.remove()
@@ -802,13 +796,6 @@ class Map():
         if loc not in frame_locs:
             return
 
-        # need extra space for tight_layout to consider the frame annnotations
-        # we can't get the actual width, but we can make use the of the default width of the axes tick labels
-        self.ax.yaxis.set_visible(True)
-        self.ax.yaxis.set_ticks_position(loc)
-        self.ax.yaxis.set_label_position(loc)
-        self.fig.tight_layout(pad=0.75)
-
         size = kwargs.pop('size', matplotlib.rcParams['font.size'])
         # styling consistent with frame, i.e. with edge
         color = kwargs.pop('color', self._edge.get_edgecolor())
@@ -820,21 +807,18 @@ class Map():
 
         if pad is None:
             pad = size / 3
+        pad /= 72 # in inch
 
         if parallels is None:
             parallels = self.parallels
 
-        m_artists = self.artists(r'grid-meridian-([\-\+0-9.]+)', regex=True)
+        # find all parallel grid lines
+        p_artists = self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
         pos = locs[loc]
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
-        xticks = []
-
-        # find all parallel grid lines
-        m_artists = self.artists(r'grid-parallel-([\-\+0-9.]+)', regex=True)
-        os = locs[loc]
-        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
         yticks = []
-        for c,match in m_artists:
+        yticklabels = []
+        for c,match in p_artists:
             p = float(match.group(1))
             if p in parallels:
                 # intersect with axis
@@ -843,33 +827,25 @@ class Map():
                 if yp_at_xlim >= ylim[0] and yp_at_xlim <= ylim[1] and self.contains(xlim[pos], yp_at_xlim):
                     m_, p_ = self.proj.inv(xlim[pos], yp_at_xlim)
                     dxy = self.proj.gradient(m_, p_, direction='parallel')
-                    dxy /= np.sqrt((dxy**2).sum())
-                    dxy *= pad / dxy[0] # same pad from frame
-                    if loc == "left":
+                    dxy *= pad / np.sqrt((dxy**2).sum())
+                    if (self.proj.lon_type == "ra" and loc == "right") or (self.proj.lon_type != "ra" and loc == "left"):
                         dxy *= -1
-                    angle = 0 # no option along the frame
+                    dxy[0] = 0 # only offset in y
 
-                    x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
-                    y_im = (yp_at_xlim - ylim[0])/(ylim[1]-ylim[0])
-                    # these are set as annotations instead of simple axis ticks
-                    # because those cannot be shifted by a constant point amount to
-                    # follow the graticule
-                    self.ax.annotate(self._config['grid']['parallel_fmt'](p), (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder,  **kwargs)
-                    yticks.append(y_im)
+                    # move the position of the label by dy:
+                    # go from data coordinates to display, offset in display, go back to data
+                    offset = matplotlib.transforms.ScaledTranslation(*dxy, self.fig.dpi_scale_trans)
+                    data_offset = self.ax.transData + offset + self.ax.transData.inverted()
+                    xy_at_xlim = data_offset.transform((xlim[pos], yp_at_xlim))
+                    yticks.append(xy_at_xlim[1])
+                    yticklabels.append(self._config['grid']['parallel_fmt'](p))
 
-        if description is not None:
-            # find gap in middle of axis
-            yticks.insert(0, 0)
-            yticks.append(1)
-            yticks = np.array(yticks)
-            gaps = (yticks[1:] + yticks[:-1]) / 2
-            center_gap = np.argmin(np.abs(gaps - 0.5))
-            y_im = gaps[center_gap]
-            x_im = (xlim[pos] - xlim[0])/(xlim[1]-xlim[0])
-            dxy = [pad, 0]
-            if loc == "left":
-                dxy[0] *= -1
-            self.ax.annotate(description, (x_im, y_im), xycoords='axes fraction', xytext=dxy, textcoords='offset points', annotation_clip=False, gid='frame-parallel-label-description', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, **kwargs)
+        if len(yticks):
+            self.ax.yaxis.set_visible(True)
+            self.ax.yaxis.set_ticks_position(loc)
+            self.ax.yaxis.set_label_position(loc)
+            self.ax.yaxis.set_ticks(yticks)
+            self.ax.yaxis.set_ticklabels(yticklabels)
 
 
     def _setFrame(self):
@@ -975,7 +951,7 @@ class Map():
         self._clearFrame()
 
         # scroll to fixed pointer position: google maps style
-        factor = 0.25
+        factor = 0.1
         c = 1 - evt.step*factor # scaling factor
         xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
         xdiff, ydiff = xlim[1] - xlim[0], ylim[1] - ylim[0]
@@ -1080,7 +1056,6 @@ class Map():
         cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
         cb.solids.set_edgecolor("face")
         cb.set_label(cb_label)
-        self.fig.tight_layout(pad=0.75)
         return cb
 
     def title(self, label, **kwargs):

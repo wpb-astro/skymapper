@@ -61,9 +61,9 @@ if __name__ == "__main__":
     cb = map.colorbar(mappable, cb_label="$n$ [arcmin$^{-2}$]")
 
     # add random scatter plot
-    len = 10
-    size = 100*np.random.rand(len)
-    map.scatter(ra[:len], dec[:len], s=size, edgecolor='k', facecolor='None')
+    nsamples = 10
+    size = 100*np.random.rand(nsamples)
+    map.scatter(ra[:nsamples], dec[:nsamples], s=size, edgecolor='k', facecolor='None')
 
     # focus on relevant region
     map.focus(ra, dec)
@@ -91,12 +91,11 @@ if __name__ == "__main__":
     map3.labelMeridiansAtParallel(-90, size=8, meridians=np.arange(0,360,90))
 
     # this is slow when working with lots of samples...
-    mappable3 = map3.extrapolate(ra[::10], dec[::10], dec[::10], resolution=100)
+    mappable3 = map3.extrapolate(ra[::100], dec[::100], dec[::100], resolution=100)
     cb3 = map3.colorbar(mappable3, cb_label='Dec')
 
     # add footprint shade
-    footprint3 = map3.footprint(des, nside=nside, zorder=20, facecolors='w', alpha=0.2)
-
+    footprint3 = map3.footprint(des, nside=nside, zorder=20, facecolors='w', alpha=0.3)
     map3.title('Extrapolation on the sphere')
 
     #### 4. test Healpix map functions ####
