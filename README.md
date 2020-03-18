@@ -12,21 +12,28 @@ What can it do? For instance, find the optimal projection for a given list of sp
 ```python
 import skymapper as skm
 
-# define the best Albers projection for the footprint
-# minimizing the variation in distortion
+# 1) construct a projection, here Albers
+# lon_0, lat_0: longitude/latitude that map onto 0/0
+# lat_1, lat_2: reference latitudes for conic projection
+lon_0, lat_0, lat_1, lat_2 = 27.35, -37.04, -57.06, -11.34
+proj = skm.Albers(lon_0, lat_0, lat_1, lat_2)
+
+# alternative: define the optimal projection for set of coordinates
+# by minimizing the variation in distortion
 crit = skm.stdDistortion
 proj = skm.Albers.optimize(ra, dec, crit=crit)
 
-# construct map: will hold figure and projection
+# 2) construct map: will hold figure and projection
 # the outline of the sphere can be styled with kwargs for matplotlib Polygon
 map = skm.Map(proj)
 
-# add graticules, separated by 15 deg
+# 3) add graticules, separated by 15 deg
 # the lines can be styled with kwargs for matplotlib Line2D
 # additional arguments for formatting the graticule labels
 sep = 15
 map.grid(sep=sep)
 
+# 4) add data to the map, e.g.
 # make density plot
 nside = 32
 mappable = map.density(ra, dec, nside=nside)
@@ -41,14 +48,18 @@ map.focus(ra, dec)
 
 ![Random density in DES footprint](https://github.com/pmelchior/skymapper/raw/master/examples/example1.png)
 
-For exploratory work, you can zoom and pan, also scroll in/out (google-maps style). The `map` will automatically update the location of the graticule labels, which are not regularly spaced.
+The `map` instance has several members, most notably
+
+*  `fig`: the `matplotlib.Figure` that holds the map
+* `ax`: the `matplotlib.Axes` that holds the map
 
 The syntax mimics `matplotlib` as closely as possible. Currently supported are canonical plotting functions
 
 * `plot`
 * `scatter`
 * `hexbin` for binning and interpolating samples
-* `text` (with an optional `direction in ['parallel','meridian']` argument to align along either graticule)
+* `colorbar` with an optional argument `cb_label` to set the label
+* `text` with an optional `direction in ['parallel','meridian']` argument to align along either graticule
 
 as well as special functions
 
@@ -56,7 +67,16 @@ as well as special functions
 * `vertex` to plot a list of simple convex polygons
 * `healpix` to plot a healpix map as a list of polygons
 * `density` to create a density map in healpix cells
-* `extrapolate` to generate a field from samples over the entire sky or a subregion 
+* `extrapolate` to generate a field from samples over the entire sky or a subregion
+
+Exploratory and interactive workflows are specifically supported. For instance, you can zoom and pan, also scroll in/out (google-maps style), and the `map` will automatically update the location of the graticule labels, which are not regularly spaced.
+
+The styling of graticules can be changed by calling `map.grid()` with different parameters. Finer-grained access is provided by 
+
+* `map.labelParallelsAtFrame()` creates/styles the vertical axis labels at the intersection of the grid parallels
+* `map.labelMeridiansAtFrame()` creates/styles the horizontal axis labels at the intersection of the grid meridians
+* `map.labelParallelsAtMeridian()` creates/styles parallels at a given meridian (useful for all-sky maps)
+* `map.labelMeridiansAtParallel()` creates/styles meridians at a given parallel (useful for all-sky maps)
 
 ## Installation and Prerequisites
 
@@ -79,7 +99,7 @@ For survey footprints, you'll need [`pymangle`](https://github.com/esheldon/pyma
 
 The essential parts of the workflow are
 
-1. Creating the `Projection`, e.g. `Hammer`, `Albers`
+1. Creating the `Projection`, e.g. `Hammer`, `Albers`, `WagnerIV`
 2. Setting up a `Map` to hold the projection and matplotlib figure, ax, ...
 3. Add data to the map
 
