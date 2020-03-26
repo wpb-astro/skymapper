@@ -21,17 +21,13 @@ def getHealpixVertices(pixels, nside, nest=False):
     Returns:
         vertices: (N,4,2), RA/Dec coordinates of 4 boundary points of cell
     """
-    vertices = np.zeros((pixels.size, 4, 2))
-    for i in xrange(pixels.size):
-        corners = hp.vec2ang(np.transpose(hp.boundaries(nside,pixels[i], nest=nest)))
-        corners = np.array(corners) * 180. / np.pi
-        diff = corners[1] - corners[1][0]
-        diff[diff > 180] -= 360
-        diff[diff < -180] += 360
-        corners[1] = corners[1][0] + diff
-        vertices[i,:,0] = corners[1]
-        vertices[i,:,1] = 90.0 - corners[0]
-    return vertices
+    corners = np.transpose(hp.boundaries(nside, pixels, step=1, nest=nest), (0, 2, 1))
+    corners_x = corners[:, :, 0].flatten()
+    corners_y = corners[:, :, 1].flatten()
+    corners_z = corners[:, :, 2].flatten()
+    vertices_lon, vertices_lat = hp.rotator.vec2dir(corners_x, corners_y, corners_z, lonlat=True)
+    return np.stack([vertices_lon.reshape(-1, 4), vertices_lat.reshape(-1, 4)], axis=-1)
+
 
 def getGrid(nside, nest=False, return_vertices=False):
     pixels = np.arange(hp.nside2npix(nside))
