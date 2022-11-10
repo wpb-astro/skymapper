@@ -381,7 +381,7 @@ class Map():
         """Set map grid / graticules
 
         Args:
-            sep: distance between graticules in deg
+            sep: distance between graticules in deg. if two-element list, distance in lat and long, resp.
             parallel_fmt: formatter for parallel labels
             meridian_fmt: formatter for meridian labels
             lat_min: minimum latitude for graticules
@@ -390,6 +390,11 @@ class Map():
             lon_max: maximum longitude for graticules
             **kwargs: styling of `matplotlib.lines.Line2D` for the graticules
         """
+        try:
+            if len(sep)==2:
+                sep_lat, sep_lon = sep
+        except TypeError:
+            sep_lat = sep_lon = sep
         if parallel_fmt is None:
             parallel_fmt = degPMFormatter
         if meridian_fmt is None:
@@ -400,11 +405,11 @@ class Map():
         self._config['grid'] = _parseArgs(locals())
         self._lat_range = np.linspace(lat_min, lat_max, self._resolution)
         self._lon_range = np.linspace(lon_min, lon_max, self._resolution) + self.proj.lon_0
-        _parallels = np.arange(-90+sep,90,sep)
-        if self.proj.lon_0 % sep == 0:
-            _meridians = np.arange(sep * ((self.proj.lon_0 + 180) // sep - 1), sep * ((self.proj.lon_0 - 180) // sep), -sep)
+        _parallels = np.arange(-90+sep_lat,90,sep_lat)
+        if self.proj.lon_0 % sep_lon == 0:
+            _meridians = np.arange(sep_lon * ((self.proj.lon_0 + 180) // sep_lon - 1), sep_lon * ((self.proj.lon_0 - 180) // sep_lon), -sep_lon)
         else:
-            _meridians = np.arange(sep * ((self.proj.lon_0 + 180) // sep), sep * ((self.proj.lon_0 - 180) // sep), -sep)
+            _meridians = np.arange(sep_lon * ((self.proj.lon_0 + 180) // sep_lon), sep_lon * ((self.proj.lon_0 - 180) // sep_lon), -sep_lon)
         _meridians[_meridians < 0] += 360
         _meridians[_meridians >= 360] -= 360
 
