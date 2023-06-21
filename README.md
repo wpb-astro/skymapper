@@ -46,7 +46,7 @@ map.scatter(ra_scatter, dec_scatter, s=size_scatter, edgecolor='k', facecolor='N
 map.focus(ra, dec)
 ```
 
-![Random density in DES footprint](https://github.com/pmelchior/skymapper/raw/master/examples/example1.png)
+![Random density in DES footprint](https://github.com/pmelchior/skymapper/assets/1463403/fa1528f4-2ed0-4945-a342-17bddd64d73d)
 
 The `map` instance has several members, most notably
 
