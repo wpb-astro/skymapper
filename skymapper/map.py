@@ -473,7 +473,8 @@ class Map():
         if loc == "right":
             return "left"
 
-    def labelMeridiansAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', fmt=None, **kwargs):
+    def labelMeridiansAtParallel(self, p, loc=None, meridians=None, pad=None, direction='parallel', fmt=None, 
+                                 clear_existing_labels=False, **kwargs):
         """Label the meridians intersecting a given parallel
 
         The method is called by `grid()` but can be used to overwrite the defaults.
@@ -485,6 +486,7 @@ class Map():
             pad: padding of annotation, in units of fontsize
             direction: tangent of the label, from `['parallel', 'meridian']`
             fmt: formatter for labels, if `None` use default
+            clear_existing_labels : bool (default=False)
             **kwargs: styling of `matplotlib` annotations for the graticule labels
         """
         arguments = _parseArgs(locals())
@@ -495,6 +497,14 @@ class Map():
         myname = 'labelMeridiansAtParallel'
         if myname not in self._config.keys():
             self._config[myname] = dict()
+
+        # remove all existing labels:
+        if clear_existing_labels:
+            for _p in self._config[myname].keys():
+                gid = 'meridian-label-%r' % _p 
+                artists = self.artists(gid)
+                for artist in artists:
+                    artist.remove() 
 
         # remove exisiting labels at p
         gid = 'meridian-label-%r' % p
@@ -555,7 +565,8 @@ class Map():
 
             self.ax.annotate(fmt(m), (xp, yp), xytext=dxy, textcoords='offset points', rotation=angle, rotation_mode='anchor', horizontalalignment=horizontalalignment, verticalalignment=verticalalignment, size=size, color=color, alpha=alpha, zorder=zorder, gid=gid, in_layout=False, **kwargs)
 
-    def labelParallelsAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', fmt=None, **kwargs):
+    def labelParallelsAtMeridian(self, m, loc=None, parallels=None, pad=None, direction='parallel', fmt=None, 
+                                 clear_existing_labels=False, **kwargs):
         """Label the parallel intersecting a given meridian
 
         The method is called by `grid()` but can be used to overwrite the defaults.
@@ -567,6 +578,7 @@ class Map():
             pad: padding of annotation, in units of fontsize
             direction: tangent of the label, from `['parallel', 'meridian']`
             fmt: formatter for label, if `None` use default
+            clear_existing_labels : bool (default=False)
             **kwargs: styling of `matplotlib` annotations for the graticule labels
         """
         arguments = _parseArgs(locals())
@@ -574,6 +586,14 @@ class Map():
         myname = 'labelParallelsAtMeridian'
         if myname not in self._config.keys():
             self._config[myname] = dict()
+
+        # remove all existing labels
+        if clear_existing_labels:
+            for _m in self._config[myname].keys():
+                gid = 'parallel-label-%r' % _m
+                artists = self.artists(gid)
+                for artist in artists:
+                    artist.remove() 
 
         # remove exisiting labels at m
         gid = 'parallel-label-%r' % m
