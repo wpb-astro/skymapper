@@ -1048,7 +1048,7 @@ class Map():
 
         return self.ax.text(x, y, s, rotation=angle, rotation_mode="anchor", clip_on=True, **kwargs)
 
-    def colorbar(self, cb_collection, cb_label="", loc="right", size="2%", pad="1%"):
+    def colorbar(self, cb_collection, cb_label="", loc="right", size="2%", pad="1%", **kwargs):
         """Add colorbar to side of map.
 
         The location of the colorbar will be chosen automatically to not interfere
@@ -1060,6 +1060,7 @@ class Map():
             orientation: from ["vertical", "horizontal"]
             size: fraction of ax size to use for colorbar
             pad: fraction of ax size to use as pad to map frame
+            **kwargs: matplotlib.pyplot.colorbar keywords 
         """
         assert loc in ["top", "bottom", "left", "right"]
 
@@ -1078,7 +1079,7 @@ class Map():
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(self.ax)
         cax = divider.append_axes(loc, size=size, pad=pad)
-        cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc)
+        cb = self.fig.colorbar(cb_collection, cax=cax, orientation=orientation, ticklocation=loc, **kwargs)
         cb.solids.set_edgecolor("face")
         cb.set_label(cb_label)
         return cb
